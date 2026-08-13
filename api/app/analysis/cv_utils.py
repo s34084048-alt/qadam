@@ -392,16 +392,43 @@ def looks_like_skin(a: np.ndarray, b: np.ndarray, mask: np.ndarray) -> tuple[boo
     the hue only mildly, so a hue test is safe across skin tones in a way a
     brightness test would not be -- deliberately, because a brightness-based
     check here would refuse to work on dark skin.
+
+    THE ABSOLUTE TEST IS NOT ENOUGH ON ITS OWN. Under fluorescent or otherwise
+    cool light -- which is most clinics -- real skin measures a* and b* NEGATIVE,
+    and an absolute warmth test then answers "this is not skin" and refuses to
+    analyse the image at all. That is the same mistake as the old dark-area
+    floor: an absolute cut on a quantity the lighting dominates.
+
+    So warmth is also tested RELATIVE to the background, which is lit by the
+    same lamp. Whatever the illuminant does to the skin it does to the backdrop
+    too, and skin stays warmer than a plain backdrop under any of them. Either
+    test passing is enough: this gate exists to catch a foot sent to the eye
+    module, not to be a precise skin classifier, and being wrongly restrictive
+    breaks the product for every clinic with a fluorescent tube.
     """
     sel = mask > 0
     if sel.sum() < 100:
         return False, {"reason": "no subject segmented"}
+
     a_med = float(np.median(a[sel]))
     b_med = float(np.median(b[sel]))
-    stats = {"a_median": round(a_med, 2), "b_median": round(b_med, 2)}
-    warm_enough = a_med >= 2.0 and b_med >= 4.0
-    not_absurd = a_med <= 45.0 and b_med <= 60.0
-    return bool(warm_enough and not_absurd), stats
+    stats: dict = {"a_median": round(a_med, 2), "b_median": round(b_med, 2)}
+
+    warm_absolute = (a_med >= 2.0 and b_med >= 4.0
+                     and a_med <= 45.0 and b_med <= 60.0)
+
+    warm_relative = False
+    background = ~sel
+    if background.sum() > 500:
+        a_bg = float(np.median(a[background]))
+        b_bg = float(np.median(b[background]))
+        stats["a_vs_background"] = round(a_med - a_bg, 2)
+        stats["b_vs_background"] = round(b_med - b_bg, 2)
+        warm_relative = (a_med - a_bg) >= 2.0 and (b_med - b_bg) >= 3.0
+
+    stats["warm_absolute"] = warm_absolute
+    stats["warm_relative"] = warm_relative
+    return bool(warm_absolute or warm_relative), stats
 
 
 def chroma(a: np.ndarray, b: np.ndarray) -> np.ndarray:

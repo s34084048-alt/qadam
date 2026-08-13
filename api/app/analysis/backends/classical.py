@@ -12,6 +12,7 @@ still be reported stratified by Monk Skin Tone group (see /admin/fairness).
 
 from __future__ import annotations
 
+import cv2
 import numpy as np
 
 from .. import cv_utils
@@ -148,6 +149,7 @@ class ClassicalCVBackend:
             mask = np.full(image_bgr.shape[:2], 255, dtype=np.uint8)
             subject = mask > 0
 
+        mask = self._widen_if_the_lesion_became_the_subject(image_bgr, mask, module)
         self._require_expected_subject(image_bgr, mask, module)
 
         fn = {
@@ -163,6 +165,49 @@ class ClassicalCVBackend:
         return result
 
     # -- what each module needs to see before it measures anything ----------
+
+    def _widen_if_the_lesion_became_the_subject(self, bgr, mask, module: str):
+        """Fix a segmentation that picked the wound instead of the limb.
+
+        `estimate_subject_mask` keeps whatever stands out from the border. On a
+        wide shot that is the foot against the backdrop, which is right. On a
+        TIGHT CROP — the framing the crop tool explicitly asks for — the border
+        is skin and the thing standing out is the wound, so the wound becomes
+        "the subject". Every threshold is then measured against the wound's own
+        colour, the wound looks uniform to itself, and the answer comes back
+        no_flag. The more carefully the user framed the lesion, the more
+        certainly the result was wrong.
+
+        When the segmented region does not look like skin but the surround
+        does, the surround is the patient and the region is what is wrong with
+        them. Measuring over the whole frame puts them back in the same picture,
+        which is the only way a comparison against "their own skin" means
+        anything.
+        """
+        if module not in ("foot", "skin"):
+            return mask
+        L, a, b = cv_utils.lab_planes(bgr)
+        subject = mask > 0
+        if subject.sum() < 100 or (~subject).sum() < 500:
+            return mask
+
+        # NOT the skin-hue test. A dark eschar and dark skin share a hue -- that
+        # is exactly the property that keeps this platform fair across skin
+        # tones, and it means hue cannot separate "wound" from "patient". What
+        # does separate them is that a wound is markedly DARKER than the skin
+        # immediately around it.
+        surround = (~subject).astype(np.uint8) * 255
+        surround_is_skin, _ = cv_utils.looks_like_skin(a, b, surround)
+        if not surround_is_skin:
+            # The surround is a backdrop, not the patient. The segmentation is
+            # the normal one and the subject really is the limb.
+            return mask
+
+        darker_by = float(np.median(L[surround > 0])) - float(np.median(L[subject]))
+        if darker_by < T["foot"]["dark_rel_L"] * 0.6:
+            return mask
+
+        return np.full(bgr.shape[:2], 255, dtype=np.uint8)
 
     def _require_expected_subject(self, bgr, mask, module: str) -> None:
         """Refuse an image that does not contain the module's subject.
@@ -221,14 +266,110 @@ class ClassicalCVBackend:
 
     # -- foot ---------------------------------------------------------------
 
+    def _skin_reference(self, L, a, b, subject, t) -> tuple[float, float, float, dict]:
+        """The patient's own NORMAL skin, used as the reference every threshold
+        is relative to.
+
+        The median of the whole subject is that reference only while the lesion
+        is a minority of it. Crop tightly onto a wound -- which is exactly what
+        the crop tool asks the user to do, and exactly what a careful user does
+        -- and the median becomes the WOUND. "Darker than the median" then finds
+        nothing, and a wound filling three quarters of the frame was graded
+        no_flag. The tighter and more careful the photograph, the more certainly
+        the result was wrong.
+
+        So the reference is refined once: measure, provisionally mark anything
+        deviating from it, and if that is a large share of the subject, measure
+        again over what is left. On an image where the lesion is small the
+        provisional mark is small, nothing is recomputed, and behaviour is
+        exactly as before.
+        """
+        values = L[subject]
+        L_ref = float(np.median(values))
+        a_med = float(np.median(a[subject]))
+        b_med = float(np.median(b[subject]))
+
+        # A high percentile was tried here so that a wound filling most of the
+        # SUBJECT would still be measured against the remaining skin. It was
+        # reverted: raising the reference widens every dark region, a shadow
+        # across a finger then survives the thin-structure filter, and the
+        # false "necrotic tissue on a healthy toe" that this project already
+        # shipped once came straight back. A residual false negative is not
+        # worth re-earning that.
+        #
+        # The dominant-lesion case is instead handled upstream, by
+        # _widen_if_the_lesion_became_the_subject, which puts the surrounding
+        # skin back into the subject so the median means "skin" again.
+        info: dict = {
+            "L_reference": round(L_ref, 1),
+            "basis": "median brightness of the segmented subject",
+            "known_limit": "If the lesion fills most of the SUBJECT REGION "
+                           "even after widening, the reference is the lesion "
+                           "itself and the area can be under-reported. "
+                           "Include surrounding normal skin in the frame.",
+        }
+        return L_ref, a_med, b_med, info
+
+    @staticmethod
+    def _refuse_if_the_reference_is_the_lesion(L, subject, dark_pct, brk_pct,
+                                               ery_pct) -> None:
+        """Say "I cannot read this" instead of quietly saying "no flag".
+
+        Every threshold here is relative to the median brightness of the
+        subject. When the lesion is most of the subject, that median IS the
+        lesion, nothing is dark relative to it, and the module returns 0% and
+        no_flag over a wound that fills the frame. Silence is the worst
+        possible output: the user reads it as reassurance.
+
+        The signature of that state is a subject whose brightness splits into
+        two clearly separated populations while the measurements found nothing.
+        Otsu finds the split; the separation has to be wide, so an ordinary
+        shadow or a bit of texture does not trigger it.
+
+        This only ever converts a NEGATIVE into a request for a better
+        photograph. It cannot raise a grade, so it cannot manufacture a false
+        alarm.
+        """
+        if dark_pct >= 0.5 or brk_pct >= 0.5 or ery_pct >= 2.0:
+            return                       # something was measured; not this case
+        values = L[subject]
+        if values.size < 1000:
+            return
+
+        level, _ = cv2.threshold(values.astype(np.uint8).reshape(-1, 1), 0, 255,
+                                 cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        upper = values[values >= level]
+        lower = values[values < level]
+        if upper.size < 200 or lower.size < 200:
+            return
+
+        separation = float(upper.mean()) - float(lower.mean())
+        darker_share = float(lower.size) / float(values.size)
+        # Wide separation AND the darker population is a substantial part of
+        # the region -- i.e. the "average" this was measured against is sitting
+        # inside the dark half.
+        if separation < 45.0 or darker_share < 0.35:
+            return
+
+        raise SubjectMismatch(
+            "foot",
+            "Most of this image is markedly darker than the rest of it, which "
+            "leaves no normal skin to measure against. QADAM measures every "
+            "colour relative to the patient's own skin, so it cannot read "
+            "this image and is not reporting a result rather than reporting a "
+            "misleading one.",
+            "Re-capture from slightly further back so a margin of the "
+            "patient's normal skin is in the frame alongside the area of "
+            "interest, in even indirect light. Do not crop tightly onto the "
+            "lesion alone.",
+        )
+
     def _foot(self, bgr, mask, quality) -> ModuleResult:
         t = T["foot"]
         L, a, b = cv_utils.lab_planes(bgr)
         subject = mask > 0
         subject_area = float(subject.sum())
-        L_med = float(np.median(L[subject]))
-        a_med = float(np.median(a[subject]))
-        b_med = float(np.median(b[subject]))
+        L_med, a_med, b_med, skin_ref = self._skin_reference(L, a, b, subject, t)
         min_dim = min(bgr.shape[:2])
 
         erythema = ((a >= a_med + t["erythema_rel_a"]) & (a >= t["erythema_abs_a"])
@@ -250,6 +391,9 @@ class ClassicalCVBackend:
         ery_pct = cv_utils.area_pct(erythema, mask)
         dark_pct = cv_utils.area_pct(dark, mask)
         brk_pct = cv_utils.area_pct(slough, mask)
+
+        self._refuse_if_the_reference_is_the_lesion(L, subject, dark_pct,
+                                                    brk_pct, ery_pct)
 
         lesions = (
             # NOT called necrotic tissue. A photograph cannot separate eschar
@@ -317,6 +461,11 @@ class ClassicalCVBackend:
                 "breakdown_pct": round(brk_pct, 3),
                 "dark_area_pct": round(dark_pct, 3),
                 "subject_L_median": round(L_med, 2),
+                # What the thresholds were measured against, and whether the
+                # lesion was large enough that the reference had to be
+                # recomputed from the remaining skin. A later reader needs this
+                # to know what "relative to the patient's own skin" meant here.
+                "skin_reference": skin_ref,
                 "tissue_viability_assessed": False,
             },
         )
