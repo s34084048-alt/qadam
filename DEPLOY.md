@@ -36,8 +36,14 @@ Both hosts deploy from Git. From `qadam/`:
 git init && git add -A && git commit -m "QADAM"
 ```
 
-Then create an empty repository on GitHub and push to it. **Private** — the
-repository contains the default credentials referenced below.
+Then create an empty repository on GitHub and push to it.
+
+The repository holds no real credentials — the passwords in the README and
+`docker-compose.yml` are local development defaults, and the process refuses to
+start on them in a public deployment (see below). So public or private is a
+business decision, not a security one. What a public repository does change is
+that anyone can clone this and stand it up: it is **not validated**, and the
+boundary in the README and in every payload is what travels with it.
 
 ### 2. Deploy the API
 
