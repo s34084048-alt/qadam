@@ -14,7 +14,10 @@ node_modules/
 dist/
 .vite/
 
-samples/*.png
+# Written by `python -m app.seed`, regenerated from sample_data.py. A pattern
+# containing a slash is anchored to this directory, so the old `samples/*.png`
+# never matched api/samples/ and committed 14 MB of regenerable images.
+**/samples/*.png
 
 *.onnx
 *.pt
