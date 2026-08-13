@@ -75,7 +75,11 @@ def test_a_malformed_path_falls_back_rather_than_raising(bundle):
 
 def test_api_only_by_default():
     """docker compose puts nginx in front and the dev server proxies, so the
-    default must stay API-only rather than quietly mounting a stale bundle."""
+    default must stay API-only rather than quietly mounting a stale bundle.
+
+    `_env_file=None` asserts the shipped default rather than this machine's
+    .env, which would otherwise decide whether the test passes.
+    """
     from app.config import Settings
 
-    assert Settings().serve_web_dir == ""
+    assert Settings(_env_file=None).serve_web_dir == ""

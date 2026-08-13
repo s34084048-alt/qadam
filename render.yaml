@@ -35,6 +35,15 @@ services:
       - key: WEB_CONCURRENCY
         value: "1"
 
+      # Open access: anyone with the link starts a session in one click, with
+      # no password. Each visitor gets their OWN organisation, so one visitor's
+      # captures are invisible to every other visitor. Without that isolation
+      # an open link would mean every photograph anyone uploads is browsable by
+      # everyone who has the link — and on a tool like this, someone will
+      # eventually point it at a real patient.
+      - key: DEMO_MODE
+        value: "true"
+
       # Generated once by the host. None of the repository's default
       # credentials survive the trip: app/config.py refuses to start on them,
       # and they are published in this repository.

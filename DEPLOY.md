@@ -75,7 +75,27 @@ Any other container host works the same way: build the root `Dockerfile`, set
 `ENVIRONMENT=prod`, and supply `JWT_SECRET`, `SEED_ADMIN_PASSWORD` and
 `SEED_CLINICIAN_PASSWORD`. The image reads `$PORT` and falls back to 7860.
 
-### 3. Confirm and sign in
+### 3. Open access, if you want it
+
+`DEMO_MODE=true` puts a **Start a demo session** button on the sign-in page:
+one click, no password, no account.
+
+It is safe to offer only because of what it does NOT share. Each visitor gets
+their own organisation, so the isolation boundary that already exists keeps
+their patients, cases and images invisible to every other visitor — and to the
+seeded account. A single shared login would not do that, and on a tool like
+this someone will eventually point it at a real patient: the people most likely
+to try it are the people with patients in front of them.
+
+The demo account holds a random password hash that nobody has, so it is not a
+way in through `/auth/login`. It is a clinician, never an admin. Consent is
+still enforced, and every disclaimer is unchanged.
+
+Off unless you set it. With it off, `/auth/demo` answers 404 rather than 403 —
+in a normal deployment that endpoint does not exist, and "forbidden" would
+advertise that it could.
+
+### 4. Confirm and sign in
 
 ```bash
 curl https://<host>/api/v1/health

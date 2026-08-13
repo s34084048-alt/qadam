@@ -17,12 +17,32 @@ export function Login({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [isLocal, setIsLocal] = useState(false)
+  const [demoMode, setDemoMode] = useState(false)
 
   useEffect(() => {
     api.health()
-      .then((h) => setIsLocal(h.environment === 'local'))
-      .catch(() => setIsLocal(false))
+      .then((h) => {
+        setIsLocal(h.environment === 'local')
+        // The server decides this, not the build. A client that offered
+        // one-click access on its own would be offering something the API
+        // does not have.
+        setDemoMode(h.demo_mode === true)
+      })
+      .catch(() => { setIsLocal(false); setDemoMode(false) })
   }, [])
+
+  async function startDemo() {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.startDemo()
+      onDone()
+    } catch (err) {
+      setError(err)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function signIn(withEmail: string, withPassword: string) {
     setBusy(true)
@@ -39,11 +59,23 @@ export function Login({ onDone }: { onDone: () => void }) {
 
   return (
     <main style={{ maxWidth: 420 }}>
+      {demoMode && (
+        <section className="card demo-entry">
+          <h1>{t('demo.title')}</h1>
+          <p className="hint">{t('demo.intro')}</p>
+          <button type="button" disabled={busy} onClick={() => void startDemo()}>
+            {busy ? t('demo.starting') : t('demo.start')}
+          </button>
+          <p className="hint">{t('demo.privacy')}</p>
+          <div className="caveat">{t('demo.noPatients')}</div>
+        </section>
+      )}
+
       <form
         className="card"
         onSubmit={(event) => { event.preventDefault(); void signIn(email, password) }}
       >
-        <h1>{t('login.title')}</h1>
+        <h1>{demoMode ? t('demo.haveAccount') : t('login.title')}</h1>
         <p className="hint">{t('login.role')}</p>
         <ErrorPanel error={error} />
         <div className="field">

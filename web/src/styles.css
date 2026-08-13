@@ -729,3 +729,9 @@ button.danger:disabled { opacity: .45; }
   .topbar .tagline { display: none; }
   main { padding-inline: .6rem; }
 }
+
+/* One-click demo entry. Given visual weight above the sign-in form because on
+   a shared link it is the path almost everyone takes. */
+.demo-entry { border: 2px solid var(--brand); }
+.demo-entry h1 { margin-top: 0; }
+.demo-entry > button { width: 100%; font-size: 1rem; padding: .7rem; }

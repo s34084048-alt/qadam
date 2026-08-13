@@ -70,6 +70,16 @@ class Settings(BaseSettings):
     # nginx in front, and the dev server proxies).
     serve_web_dir: str = ""
 
+    # --- open demo access ----------------------------------------------------
+    # When true, anyone with the link can start a session with one click and no
+    # password. Each visitor gets their OWN organisation, so the isolation
+    # boundary that already exists keeps their captures private from every
+    # other visitor. Without that, an open link means any photograph anyone
+    # uploads is browsable by everyone who has the link.
+    demo_mode: bool = False
+    # A ceiling, because the endpoint creates rows and is open to the internet.
+    demo_max_sessions: int = 500
+
     # --- seeding -------------------------------------------------------------
     seed_admin_email: str = "admin@qadam.local"
     seed_admin_password: str = "qadam-admin"

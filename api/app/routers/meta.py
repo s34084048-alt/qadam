@@ -19,6 +19,7 @@ async def health() -> HealthOut:
         clinical_use=False,
         version=__version__,
         environment=settings.environment,
+        demo_mode=settings.demo_mode,
         disclaimer=safety_block()["disclaimer"],
         device_notice=safety_block()["device_notice"],
     )

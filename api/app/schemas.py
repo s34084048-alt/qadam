@@ -241,6 +241,9 @@ class HealthOut(BaseModel):
     clinical_use: bool
     version: str
     environment: str
+    # Tells the client whether to offer one-click access. The server is
+    # the authority on this; the UI must not decide it locally.
+    demo_mode: bool = False
     disclaimer: str
     device_notice: str
 

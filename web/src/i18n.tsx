@@ -20,6 +20,17 @@ const en: Dict = {
   'nav.signout': 'Sign out',
   'nav.language': 'العربية',
 
+  'demo.title': 'Try QADAM',
+  'demo.intro':
+    'No account and no password. One click starts a private session, and everything you capture stays in it.',
+  'demo.start': 'Start a demo session',
+  'demo.starting': 'Starting…',
+  'demo.privacy':
+    'Your session is isolated: nobody else using this link can see your patients, cases or images — and you cannot see theirs.',
+  'demo.noPatients':
+    'Use test images only. Do not photograph a real patient. This is an unvalidated prototype on a public server, and anything captured here is lost when the server restarts.',
+  'demo.haveAccount': 'Or sign in with an account',
+
   'login.title': 'Sign in',
   'login.email': 'Email',
   'login.password': 'Password',
@@ -366,6 +377,17 @@ const ar: Dict = {
   'nav.fairness': 'الإنصاف',
   'nav.signout': 'تسجيل الخروج',
   'nav.language': 'English',
+
+  'demo.title': 'QADAM را امتحان کنید',
+  'demo.intro':
+    'بدون حساب و بدون رمز. یک کلیک یک نشست خصوصی می‌سازد و هرچه ثبت کنید در همان می‌ماند.',
+  'demo.start': 'شروع نشست دمو',
+  'demo.starting': 'در حال شروع…',
+  'demo.privacy':
+    'نشست شما جداست: هیچ‌کس دیگری که این لینک را دارد بیماران، کیس‌ها یا تصاویر شما را نمی‌بیند — و شما هم مال آن‌ها را نمی‌بینید.',
+  'demo.noPatients':
+    'فقط از تصاویر آزمایشی استفاده کنید. از بیمار واقعی عکس نگیرید. این یک نمونهٔ اولیهٔ اعتبارسنجی‌نشده روی سرور عمومی است و هرچه اینجا ثبت شود با راه‌اندازی مجدد سرور از بین می‌رود.',
+  'demo.haveAccount': 'یا با یک حساب وارد شوید',
 
   'login.title': 'تسجيل الدخول',
   'login.email': 'البريد الإلكتروني',

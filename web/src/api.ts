@@ -102,6 +102,16 @@ export const api = {
     return data
   },
 
+  // One-click access with no password. Available only when the API reports
+  // demo_mode; each call creates a session isolated in its own organisation.
+  async startDemo() {
+    const resp = await fetch(`${BASE}/auth/demo`, { method: 'POST' })
+    if (!resp.ok) throw await toError(resp)
+    const data = await resp.json()
+    session.set(data.access_token, data.role, data.email)
+    return data
+  },
+
   modules: () =>
     request<{ modules: ModuleInfo[]; grades: Record<string, { color: string; label_en: string; label_ar: string }>; safety: SafetyBlock }>('/modules'),
 
@@ -115,6 +125,7 @@ export const api = {
       clinical_use: boolean
       version: string
       environment: string
+      demo_mode: boolean
     }>('/health'),
 
   createPatient: (payload: {
