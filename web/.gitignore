@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.vite/
+.env
+
+# Development TLS material. Never commit a private key, and never ship this
+# certificate — it exists only so a phone on the LAN gets a secure context.
+certs/*.pem

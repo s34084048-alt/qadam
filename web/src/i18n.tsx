@@ -1,0 +1,745 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
+
+export type Lang = 'en' | 'ar'
+
+type Dict = Record<string, string>
+
+const en: Dict = {
+  'app.name': 'QADAM',
+  'app.tagline': 'Surface screening and triage routing',
+  'banner.device': 'NOT A MEDICAL DEVICE — not for clinical use.',
+  'banner.disclaimer':
+    'Research/decision-support tool — not a diagnosis. Not a substitute for clinical assessment.',
+  'banner.human': 'A qualified clinician must confirm every clinically significant output.',
+
+  'nav.new': 'New case',
+  'nav.cases': 'Cases',
+  'nav.emergency': 'Emergency',
+  'nav.fairness': 'Fairness',
+  'nav.signout': 'Sign out',
+  'nav.language': 'العربية',
+
+  'login.title': 'Sign in',
+  'login.email': 'Email',
+  'login.password': 'Password',
+  'login.submit': 'Sign in',
+  'login.working': 'Signing in…',
+  'login.role': 'Trained health worker access only.',
+  'login.demoAccounts':
+    'Local demo build — seeded accounts, click to sign in. These do not exist in a deployed instance.',
+
+  'new.step.module': '1. Choose a module',
+  'new.step.patient': '2. Patient record and consent',
+  'new.step.capture': '3. Capture or upload',
+  'new.step.result': '4. Result',
+  'new.patient.ref': 'Patient reference (pseudonymous code)',
+  'new.patient.refHint':
+    'A site-local code only. Do not enter a name, an MRN, or any contact detail.',
+  'new.patient.site': 'Body site',
+  'new.patient.tone': 'Monk Skin Tone (optional, patient-declared)',
+  'new.patient.toneHint':
+    'Recorded only so performance can be reported per skin-tone group. It is never used as an analysis input.',
+  'new.patient.consent': 'The patient has consented to their image being stored and analysed.',
+  'new.patient.consentRequired': 'Consent is required before any image is stored.',
+  'new.patient.create': 'Create / open record',
+  'new.patient.ready': 'Record ready',
+  'crop.title': 'Crop to the area being assessed',
+  'crop.help': 'Drag a box around the area you are assessing.',
+  'crop.tooSmall': 'That selection is too small to analyse. Drag a larger box, or use the whole image.',
+  'crop.failed': 'The crop could not be produced. Use the whole image instead.',
+  'crop.apply': 'Use this area',
+  'crop.skip': 'Use the whole image',
+  'crop.reopen': 'Crop',
+  'crop.why':
+    'Every measurement is a percentage of the segmented subject, so what else is in frame changes the numbers. Background that leaks in shifts the skin reference that every threshold is relative to, and a lesion filling 4% of a wide shot fills 30% of a tight one. Cropping is the single most effective thing you can do to make the result mean something.',
+  'capture.blocked':
+    'Capture is switched off until step 2 is complete. Enter the patient reference above, tick the consent box, and press "Create / open record" — no image may be taken or stored before consent is recorded.',
+  'capture.preparing': 'Preparing the image…',
+  'capture.prepared': 'Resized for upload',
+  'diag.open': 'Camera not working? Run a check',
+  'diag.origin': 'Address',
+  'diag.secure': 'Secure context',
+  'diag.permission': 'Camera permission',
+  'diag.api': 'Camera API available',
+  'diag.devices': 'Cameras found',
+  'diag.lastTest': 'Last test result',
+  'diag.test': 'Test the camera now',
+  'diag.testing': 'Testing…',
+  'diag.copy': 'Copy this report',
+  'diag.fixInsecure':
+    'The address is not a secure context, so the browser has removed the camera API entirely. Open the app over HTTPS or on localhost. This is the usual cause when a phone is opened on an http://192.168.x.x address.',
+  'diag.fixNoApi':
+    'This browser does not expose a camera API here. Use the "Take photo (device camera app)" button instead — it needs no permission.',
+  'diag.fixDenied':
+    'Camera access is BLOCKED for this address. Click the camera or lock icon in the address bar, set Camera to Allow, then reload. On a phone also check the browser app itself has camera permission in system settings.',
+  'diag.fixNoDevice':
+    'No camera was found on this device. Use "Take photo (device camera app)" or upload an image taken elsewhere.',
+  'diag.fixBusy':
+    'The camera is in use by another application. Close any video call or camera app and test again.',
+  'diag.fixPrompt':
+    'Permission has not been asked for yet. Press "Test the camera now" and accept the prompt.',
+  'diag.fixUnknown':
+    'The camera failed for a reason this check could not classify. Copy the report and send it on — the "Last test result" line names the exact browser error.',
+  'diag.fixNone':
+    'Everything needed is present. If capture still fails, press "Test the camera now" and read the result line.',
+  'camera.starting': 'Starting camera…',
+  'camera.denied':
+    'Camera access is blocked for this site. Click the camera or lock icon in the browser address bar, set Camera to Allow, then press "Use camera" again. On a phone, also check the browser app has camera permission in system settings.',
+  'camera.notFound':
+    'No camera was found on this device.',
+  'camera.busy':
+    'The camera is already in use by another application. Close the other app — video call, camera app — and try again.',
+  'camera.insecure':
+    'The camera only works over HTTPS or on localhost. You appear to be on a plain http:// address, so the browser has disabled it. Open the app via localhost or an HTTPS address, or upload an image instead.',
+  'camera.failed': 'The camera could not be started.',
+  'camera.uploadInstead':
+    'You can still upload a photo taken with the device camera app — the analysis is identical.',
+  'new.capture.camera': 'Use camera',
+  'new.capture.stop': 'Stop camera',
+  'new.capture.shoot': 'Capture',
+  'new.capture.deviceCamera': 'Take photo (device camera app)',
+  'new.capture.upload': 'Upload an image',
+  'new.capture.retake': 'Retake',
+  'new.capture.analyze': 'Analyse',
+  'new.capture.analysing': 'Analysing…',
+  'new.guidance.title': 'Capture guidance',
+  'new.guidance.distance': 'Hold the camera 20–30 cm from the area and tap to focus.',
+  'new.guidance.framing': 'Fill about half the frame with the area of interest.',
+  'new.guidance.light': 'Use even, indirect light. Avoid flash, glare and shadows.',
+  'new.guidance.background': 'Use a plain background and keep the camera steady.',
+  'new.guidance.scale': 'Include a size marker where possible for comparison over time.',
+
+  'offline.offline': 'No connection — working offline',
+  'offline.online': 'Connected',
+  'offline.queued': 'item(s) waiting to send',
+  'offline.showQueue': 'Show what is waiting',
+  'offline.syncNow': 'Send now',
+  'offline.syncing': 'Sending…',
+  'offline.notAnalysed':
+    'Queued captures have NOT been analysed — the analysis runs on the server. A waiting item has no triage grade, and no grade is not the same as no flag. Act on your own clinical judgement; do not wait for this to send.',
+  'offline.failed':
+    'An item was rejected by the server and everything after it is held back, because later items depend on it. Open the queue to see why.',
+  'offline.stopped': 'Sending stopped',
+  'offline.failedItem': 'rejected',
+  'offline.discard': 'Discard everything waiting',
+  'offline.discardConfirm': 'This permanently deletes the captures and findings waiting on this device. ',
+  'offline.discardYes': 'Yes, delete them',
+  'offline.discardNo': 'Cancel',
+  'offline.queuedCapture': 'Saved on this device — not yet sent or analysed',
+  'offline.willQueue':
+    'No connection. This will be saved on this device and sent when you are back online.',
+  'foot.title': 'Diabetic foot risk assessment (IWGDF)',
+  'foot.intro':
+    'Structured examination, not image analysis. Loss of protective sensation, arterial disease, deformity and history are what set the risk category and the screening interval — and none of them is visible in a photograph.',
+  'foot.none': 'No foot risk assessment recorded for this case yet.',
+  'foot.record': 'Record foot examination',
+  'foot.side': 'Foot',
+  'foot.lops': 'Loss of protective sensation (10 g monofilament)',
+  'foot.pad': 'Peripheral artery disease (pulses / ankle or toe pressures)',
+  'foot.deformity': 'Foot deformity',
+  'foot.previousUlcer': 'Previous foot ulcer',
+  'foot.previousAmputation': 'Previous lower-extremity amputation',
+  'foot.esrd': 'End-stage renal disease / dialysis',
+  'foot.requiredTest': 'required for stratification',
+  'foot.finding.present': 'Present',
+  'foot.finding.absent': 'Absent (tested)',
+  'foot.finding.not_tested': 'Not tested',
+  'foot.willNotStratify':
+    'No risk category will be produced, because these required tests are marked as not performed:',
+  'foot.save': 'Save assessment',
+  'foot.saving': 'Saving…',
+  'foot.category': 'IWGDF category',
+  'foot.notStratified': 'Not stratified',
+  'foot.incompleteTitle': 'No category was produced. An absent test is not a negative test.',
+  'foot.nextScreening': 'Next screening',
+  'foot.interval': 'Interval',
+  'inv.title': 'Investigation results',
+  'inv.notInterpreted':
+    'STORED, NOT INTERPRETED. QADAM has not read these documents and has produced no finding, grade or opinion from them. They are filed here so the clinician who ordered the investigation sees the result next to the referral that prompted it.',
+  'inv.closesLoop':
+    'Reading a radiology study needs the whole study, the clinical context, prior imaging and a trained reporter. This platform has none of those, so it files the result rather than pretending to read it.',
+  'inv.none': 'No results filed against this case yet.',
+  'inv.add': 'File a result',
+  'inv.category': 'Category',
+  'inv.modality': 'Modality',
+  'inv.bodySite': 'Body site',
+  'inv.service': 'Reporting service',
+  'inv.serviceHint': 'The department or service — not a named individual.',
+  'inv.reportText': 'Report text',
+  'inv.file': 'Document (PDF, JPEG, PNG, WebP or text)',
+  'inv.fileHint':
+    'DICOM is not accepted: its headers carry the patient name, date of birth and accession number, which would break the pseudonymity of this record. Export a de-identified PDF or image from the PACS instead.',
+  'inv.ack':
+    'I confirm identifiers have been removed or covered. Reports and screenshots routinely show the patient name, date of birth and accession number, and this platform stores pseudonymous records only.',
+  'inv.save': 'File result',
+  'inv.saving': 'Filing…',
+  'inv.openFile': 'Open document',
+  'lab.panelName': 'Panel name (optional)',
+  'lab.age': 'Age',
+  'lab.sex': 'Sex',
+  'lab.ageHint':
+    'Age and sex are used for sex-specific reference ranges and for eGFR and FIB-4. Left blank, they are taken from the patient record; those indices are simply not produced if age is unknown.',
+  'lab.addAnalyte': 'Add an analyte',
+  'lab.choose': 'Choose…',
+  'lab.noRows': 'No analytes added yet. Pick one above.',
+  'lab.reference': 'Reference',
+  'lab.save': 'Save and interpret',
+  'lab.saving': 'Saving…',
+  'lab.results': 'Results',
+  'lab.analyte': 'Analyte',
+  'lab.value': 'Value',
+  'lab.flag': 'Flag',
+  'lab.asEntered': 'As entered',
+  'lab.critical': 'critical',
+  'lab.notFlagged': 'not flagged',
+  'lab.analytes': 'analytes',
+  'lab.flagged': 'flagged',
+  'lab.derived': 'Derived indices',
+  'lab.unrecognised': 'Stored but not interpreted',
+  'lab.addPanel': 'Add laboratory results',
+  'lab.needCase': 'Create the patient record above first.',
+  'lab.panels': 'Laboratory panels',
+  'lab.noPanels': 'No laboratory results attached to this case yet.',
+  'lab.attachHint':
+    'Results can be attached to any case, so an imaging case that routed to bloods can hold what came back.',
+  'emergency.whyStatic': 'Why this page shows nothing about your patient',
+  'emergency.moveOnlyIf': 'Move them ONLY if',
+  'clinical.title': 'Clinical considerations for the reviewing clinician',
+  'clinical.considerations': 'What this pattern is compatible with',
+  'clinical.overlapsWith': 'This pattern overlaps with all of these:',
+  'clinical.distinguishedBy': 'Distinguished by',
+  'clinical.immediateActions': 'Immediate protective steps, pending review',
+  'clinical.immediateActionsNote':
+    'Protective measures only, to be taken while the referral is arranged. No medication or procedure is recommended, and these do not replace the clinician’s plan.',
+  'clinical.askAndCheck': 'Ask and examine — these are not in the result',
+  'clinical.askAndCheckNote':
+    'These often matter more than the image. Record the answers with the case.',
+  'clinical.notAssessable': 'Not assessable from what was supplied',
+
+  'followUp.title': 'Answers the camera cannot give',
+  'followUp.intro':
+    'These are the findings that decide the case and that no photograph contains. Answer what you actually examined; leave the rest blank.',
+  'followUp.rule':
+    'Answers can raise the urgency of this case. They never lower it — a measured image flag is not withdrawn because a test was reported as normal.',
+  'followUp.notes': 'Clinical notes',
+  'followUp.notesHint':
+    'Free text. Stored and shown exactly as written, and included in the PDF. It is never parsed, scored, or used as an input to any model.',
+  'followUp.notesPlaceholder':
+    'History, examination findings, what you have already done, what you are asking the reviewing clinician…',
+  'followUp.submit': 'Save and re-assess',
+  'followUp.saving': 'Re-assessing…',
+  'followUp.reset': 'Clear answers',
+  'followUp.open': 'Answer follow-up questions',
+  'followUp.why': 'Why this is asked',
+  'followUp.answered': 'answered',
+  'followUp.unanswered': 'not answered',
+  'followUp.imageGrade': 'From the image',
+  'followUp.answerGrade': 'From your answers',
+  'followUp.combined': 'Combined grade',
+  'followUp.escalated': 'Escalated by your answers',
+  'followUp.notEscalated': 'Your answers did not raise the grade.',
+  'followUp.triggers': 'What your answers raised',
+  'followUp.because': 'Why it matters',
+  'followUp.consider': 'Consider',
+  'followUp.distinguishedBy': 'Distinguished by',
+  'followUp.history': 'Previous follow-up entries',
+  'followUp.recordedBy': 'Recorded',
+  'followUp.noEntries': 'No follow-up answers have been recorded for this case.',
+  'followUp.emptyAnswers':
+    'Answer at least one question, or write a note, before saving.',
+  'followUp.queued':
+    'No connection — your answers are saved on this device and will be sent when you reconnect. The re-assessment runs on the server, so no combined grade is shown yet.',
+  'followUp.blank': '—',
+  'followUp.opt.yes': 'Yes',
+  'followUp.opt.no': 'No',
+  'followUp.opt.unknown': 'Not known',
+  'followUp.opt.not_tested': 'Not tested',
+  'followUp.opt.not_applicable': 'Not applicable',
+  'followUp.opt.both_palpable': 'Both palpable',
+  'followUp.opt.one_absent': 'One absent',
+  'followUp.opt.both_absent': 'Both absent',
+  'followUp.opt.intact': 'Intact',
+  'followUp.opt.reduced': 'Reduced',
+  'followUp.opt.absent': 'Absent',
+
+  'calib.title': 'Colour reference',
+  'calib.applied': 'Calibrated against a reference card',
+  'calib.notDetected': 'No reference card in this image',
+  'calib.unusable': 'Reference card found but not usable',
+  'calib.shift': 'Illuminant shift corrected',
+  'calib.howTo': 'How to use a reference card',
+  'calib.why':
+    'Colour in a phone photograph is set more by the light in the room than by the patient. A neutral grey or white card in the frame makes today’s image comparable with last week’s.',
+
+  'delete.title': 'Delete this case',
+  'delete.warn':
+    'This permanently destroys the images and every assessment derived from them. There is no recycle bin and this cannot be undone.',
+  'delete.keeps':
+    'The pseudonymous patient record is kept, and so is the audit entry recording that this case was deleted. Neither holds a patient identifier or any clinical content.',
+  'delete.button': 'Delete case',
+  'delete.confirmPrompt': 'Type DELETE to confirm',
+  'delete.confirmWord': 'DELETE',
+  'delete.confirm': 'Permanently delete',
+  'delete.cancel': 'Cancel',
+  'delete.working': 'Deleting…',
+  'delete.done': 'Case deleted.',
+  'delete.removed': 'Removed',
+
+  'result.triage': 'Triage',
+  'result.confidence': 'Confidence',
+  'result.nextStep': 'Recommended next step',
+  'result.routeTo': 'Route to',
+  'result.timeframe': 'Timeframe',
+  'result.findings': 'Detected surface features',
+  'result.noFindings': 'No discrete surface finding was isolated in this image.',
+  'result.rationale': 'Basis for this grade',
+  'result.quality': 'Image quality',
+  'result.limitations': 'Not assessed / limitations',
+  'result.overlay': 'Annotated image',
+  'result.pdf': 'Download clinician summary (PDF)',
+  'result.summary': 'Clinician summary',
+  'result.model': 'Model',
+  'result.newCase': 'Start another case',
+  'result.openCase': 'Open case',
+  'result.area': 'Area',
+  'result.severity': 'Severity',
+
+  'quality.rejected': 'Image rejected — please re-capture',
+  'quality.passed': 'Passed',
+  'quality.degraded': 'Degraded',
+  'quality.check.resolution': 'Resolution',
+  'quality.check.focus': 'Focus',
+  'quality.check.exposure': 'Exposure',
+  'quality.check.subject_present': 'Subject in frame',
+  'quality.measured': 'Measured',
+  'quality.threshold': 'Threshold',
+
+  'cases.title': 'Cases',
+  'cases.module': 'Module',
+  'cases.grade': 'Grade',
+  'cases.patient': 'Patient reference',
+  'cases.created': 'Created',
+  'cases.status': 'Status',
+  'cases.analyses': 'Analyses',
+  'cases.none': 'No cases match these filters.',
+  'cases.all': 'All',
+  'cases.filter': 'Filter',
+
+  'case.title': 'Case',
+  'case.latest': 'Latest analysis',
+  'case.history': 'Earlier analyses',
+  'case.compare': 'Compare over time',
+  'case.compareHint':
+    'Side-by-side comparison of the same case. Differences may reflect the condition, the lighting, or the framing — a clinician decides which.',
+  'case.noHistory': 'No earlier analysis to compare against yet.',
+  'case.back': 'Back to cases',
+
+  'fairness.title': 'Fairness (placeholder)',
+  'fairness.group': 'Monk Skin Tone group',
+  'fairness.analyses': 'Analyses',
+  'fairness.meanConfidence': 'Mean reported confidence',
+  'fairness.qualityPass': 'Quality pass rate',
+  'fairness.coverage': 'Skin tone recorded for',
+  'fairness.ofAnalyses': 'of analyses',
+
+  'common.loading': 'Loading…',
+  'common.error': 'Something went wrong',
+  'common.hint': 'What to do',
+  'common.close': 'Close',
+  'common.required': 'required',
+  'common.notRecorded': 'not recorded',
+  'common.intendedUse': 'Intended use',
+}
+
+const ar: Dict = {
+  'app.name': 'قَدَم',
+  'app.tagline': 'فحص سطحي وتوجيه الفرز',
+  'banner.device': 'ليس جهازاً طبياً — غير مخصص للاستخدام السريري.',
+  'banner.disclaimer':
+    'أداة بحثية لدعم القرار — ليست تشخيصاً. ولا تُغني عن التقييم السريري.',
+  'banner.human': 'يجب أن يؤكد طبيب مؤهل كل نتيجة ذات دلالة سريرية.',
+
+  'nav.new': 'حالة جديدة',
+  'nav.cases': 'الحالات',
+  'nav.emergency': 'الطوارئ',
+  'nav.fairness': 'الإنصاف',
+  'nav.signout': 'تسجيل الخروج',
+  'nav.language': 'English',
+
+  'login.title': 'تسجيل الدخول',
+  'login.email': 'البريد الإلكتروني',
+  'login.password': 'كلمة المرور',
+  'login.submit': 'دخول',
+  'login.working': 'جارٍ الدخول…',
+  'login.role': 'مخصص للكوادر الصحية المدرَّبة فقط.',
+  'login.demoAccounts':
+    'نسخة تجريبية محلية — حسابات تجريبية، اضغط للدخول. لا وجود لها في أي نسخة منشورة.',
+
+  'new.step.module': '١. اختر الوحدة',
+  'new.step.patient': '٢. سجل المريض والموافقة',
+  'new.step.capture': '٣. التقاط أو رفع صورة',
+  'new.step.result': '٤. النتيجة',
+  'new.patient.ref': 'رمز المريض (رمز مستعار)',
+  'new.patient.refHint': 'رمز محلي فقط. لا تُدخل اسماً أو رقم ملف أو بيانات تواصل.',
+  'new.patient.site': 'موضع الجسم',
+  'new.patient.tone': 'مقياس مونك للون البشرة (اختياري، بإفادة المريض)',
+  'new.patient.toneHint':
+    'يُسجَّل فقط لعرض الأداء لكل فئة لون بشرة. لا يُستخدم أبداً كمدخل للتحليل.',
+  'new.patient.consent': 'وافق المريض على تخزين صورته وتحليلها.',
+  'new.patient.consentRequired': 'الموافقة مطلوبة قبل تخزين أي صورة.',
+  'new.patient.create': 'إنشاء / فتح السجل',
+  'new.patient.ready': 'السجل جاهز',
+  'crop.title': 'اقتصاص المنطقة المراد تقييمها',
+  'crop.help': 'اسحب مربعاً حول المنطقة التي تقيّمها.',
+  'crop.tooSmall': 'هذا التحديد صغير جداً للتحليل. اسحب مربعاً أكبر، أو استخدم الصورة كاملة.',
+  'crop.failed': 'تعذّر إنشاء الاقتصاص. استخدم الصورة كاملة.',
+  'crop.apply': 'استخدم هذه المنطقة',
+  'crop.skip': 'استخدم الصورة كاملة',
+  'crop.reopen': 'اقتصاص',
+  'crop.why':
+    'كل قياس هو نسبة من الهدف المقتطع، لذا فإن ما يوجد في الإطار يغيّر الأرقام. الخلفية المتسربة تزيح مرجع الجلد الذي تُقاس عليه كل العتبات، وآفة تملأ ٤٪ من لقطة واسعة تملأ ٣٠٪ من لقطة قريبة. الاقتصاص أكثر ما يمكنك فعله لجعل النتيجة ذات معنى.',
+  'capture.blocked':
+    'الالتقاط معطَّل حتى تكتمل الخطوة ٢. أدخل رمز المريض أعلاه، وحدّد مربع الموافقة، ثم اضغط «إنشاء / فتح السجل» — لا يجوز التقاط أو تخزين أي صورة قبل تسجيل الموافقة.',
+  'capture.preparing': 'جارٍ تجهيز الصورة…',
+  'capture.prepared': 'تم تصغيرها للرفع',
+  'diag.open': 'الكاميرا لا تعمل؟ شغّل فحصاً',
+  'diag.origin': 'العنوان',
+  'diag.secure': 'سياق آمن',
+  'diag.permission': 'إذن الكاميرا',
+  'diag.api': 'واجهة الكاميرا متاحة',
+  'diag.devices': 'الكاميرات المكتشفة',
+  'diag.lastTest': 'نتيجة آخر اختبار',
+  'diag.test': 'اختبر الكاميرا الآن',
+  'diag.testing': 'جارٍ الاختبار…',
+  'diag.copy': 'انسخ هذا التقرير',
+  'diag.fixInsecure':
+    'العنوان ليس سياقاً آمناً، لذا أزال المتصفح واجهة الكاميرا بالكامل. افتح التطبيق عبر HTTPS أو على localhost. هذا هو السبب المعتاد عند فتح الهاتف على عنوان http://192.168.x.x.',
+  'diag.fixNoApi':
+    'هذا المتصفح لا يوفّر واجهة كاميرا هنا. استخدم زر «التقاط صورة (تطبيق كاميرا الجهاز)» — لا يحتاج إذناً.',
+  'diag.fixDenied':
+    'الوصول إلى الكاميرا محظور لهذا العنوان. اضغط أيقونة الكاميرا أو القفل في شريط العنوان، واضبطها على «السماح»، ثم أعد التحميل. على الهاتف تحقق أيضاً من صلاحية الكاميرا للمتصفح في إعدادات النظام.',
+  'diag.fixNoDevice':
+    'لم يتم العثور على كاميرا في هذا الجهاز. استخدم «التقاط صورة (تطبيق كاميرا الجهاز)» أو ارفع صورة.',
+  'diag.fixBusy':
+    'الكاميرا مستخدمة من تطبيق آخر. أغلق أي مكالمة فيديو أو تطبيق كاميرا ثم أعد الاختبار.',
+  'diag.fixPrompt':
+    'لم يُطلب الإذن بعد. اضغط «اختبر الكاميرا الآن» واقبل الطلب.',
+  'diag.fixUnknown':
+    'فشلت الكاميرا لسبب لم يستطع هذا الفحص تصنيفه. انسخ التقرير وأرسله — سطر «نتيجة آخر اختبار» يذكر خطأ المتصفح بدقة.',
+  'diag.fixNone':
+    'كل ما يلزم متوفر. إذا استمر الفشل، اضغط «اختبر الكاميرا الآن» واقرأ سطر النتيجة.',
+  'camera.starting': 'جارٍ تشغيل الكاميرا…',
+  'camera.denied':
+    'الوصول إلى الكاميرا محظور لهذا الموقع. اضغط على أيقونة الكاميرا أو القفل في شريط العنوان، واضبط الكاميرا على «السماح»، ثم اضغط «استخدام الكاميرا» مرة أخرى. على الهاتف، تحقق أيضاً من صلاحية الكاميرا للمتصفح في إعدادات النظام.',
+  'camera.notFound': 'لم يتم العثور على كاميرا في هذا الجهاز.',
+  'camera.busy':
+    'الكاميرا مستخدمة من تطبيق آخر. أغلق التطبيق الآخر — مكالمة فيديو أو تطبيق الكاميرا — ثم أعد المحاولة.',
+  'camera.insecure':
+    'تعمل الكاميرا فقط عبر HTTPS أو على localhost. يبدو أنك على عنوان http:// عادي، لذا عطّلها المتصفح. افتح التطبيق عبر localhost أو عنوان HTTPS، أو ارفع صورة بدلاً من ذلك.',
+  'camera.failed': 'تعذّر تشغيل الكاميرا.',
+  'camera.uploadInstead':
+    'ما زال بإمكانك رفع صورة التقطتها بتطبيق الكاميرا — التحليل مطابق تماماً.',
+  'new.capture.camera': 'استخدام الكاميرا',
+  'new.capture.stop': 'إيقاف الكاميرا',
+  'new.capture.shoot': 'التقاط',
+  'new.capture.deviceCamera': 'التقاط صورة (تطبيق كاميرا الجهاز)',
+  'new.capture.upload': 'رفع صورة',
+  'new.capture.retake': 'إعادة الالتقاط',
+  'new.capture.analyze': 'تحليل',
+  'new.capture.analysing': 'جارٍ التحليل…',
+  'new.guidance.title': 'إرشادات الالتقاط',
+  'new.guidance.distance': 'أمسك الكاميرا على بعد ٢٠–٣٠ سم وانقر لضبط التركيز.',
+  'new.guidance.framing': 'اجعل المنطقة المطلوبة تملأ نصف الإطار تقريباً.',
+  'new.guidance.light': 'استخدم إضاءة متساوية غير مباشرة. تجنّب الفلاش والوهج والظلال.',
+  'new.guidance.background': 'استخدم خلفية سادة وثبّت الكاميرا.',
+  'new.guidance.scale': 'أضف مقياس حجم عند الإمكان للمقارنة عبر الزمن.',
+
+  'offline.offline': 'لا يوجد اتصال — العمل دون إنترنت',
+  'offline.online': 'متصل',
+  'offline.queued': 'عنصر بانتظار الإرسال',
+  'offline.showQueue': 'عرض ما ينتظر',
+  'offline.syncNow': 'أرسل الآن',
+  'offline.syncing': 'جارٍ الإرسال…',
+  'offline.notAnalysed':
+    'الصور المنتظِرة لم تُحلَّل — التحليل يجري على الخادم. العنصر المنتظِر لا يحمل درجة فرز، وغياب الدرجة ليس كغياب العلامة. اعمل بحكمك السريري ولا تنتظر الإرسال.',
+  'offline.failed':
+    'رُفض عنصر من الخادم، وأُوقف كل ما بعده لأن العناصر اللاحقة تعتمد عليه. افتح القائمة لمعرفة السبب.',
+  'offline.stopped': 'توقف الإرسال',
+  'offline.failedItem': 'مرفوض',
+  'offline.discard': 'حذف كل ما ينتظر',
+  'offline.discardConfirm': 'سيحذف هذا نهائياً الصور والنتائج المنتظِرة على هذا الجهاز. ',
+  'offline.discardYes': 'نعم، احذفها',
+  'offline.discardNo': 'إلغاء',
+  'offline.queuedCapture': 'محفوظ على هذا الجهاز — لم يُرسل ولم يُحلَّل بعد',
+  'offline.willQueue':
+    'لا يوجد اتصال. سيُحفظ هذا على الجهاز ويُرسل عند عودة الاتصال.',
+  'foot.title': 'تقييم خطورة القدم السكرية (IWGDF)',
+  'foot.intro':
+    'فحص منظَّم، لا تحليل صورة. فقدان الإحساس الواقي ومرض الشرايين والتشوه والتاريخ المرضي هي ما يحدد فئة الخطورة وفترة الفحص — ولا يظهر أي منها في صورة.',
+  'foot.none': 'لم يُسجَّل تقييم خطورة للقدم في هذه الحالة بعد.',
+  'foot.record': 'تسجيل فحص القدم',
+  'foot.side': 'القدم',
+  'foot.lops': 'فقدان الإحساس الواقي (مونوفيلامنت ١٠ غ)',
+  'foot.pad': 'مرض الشرايين المحيطية (النبض / ضغط الكاحل أو الإصبع)',
+  'foot.deformity': 'تشوه القدم',
+  'foot.previousUlcer': 'قرحة قدم سابقة',
+  'foot.previousAmputation': 'بتر سابق في الطرف السفلي',
+  'foot.esrd': 'مرض كلوي بمرحلة نهائية / غسيل كلوي',
+  'foot.requiredTest': 'مطلوب للتصنيف',
+  'foot.finding.present': 'موجود',
+  'foot.finding.absent': 'غير موجود (تم الفحص)',
+  'foot.finding.not_tested': 'لم يُفحص',
+  'foot.willNotStratify':
+    'لن تُنتَج فئة خطورة، لأن هذه الفحوص المطلوبة مُعلَّمة كغير مُنفَّذة:',
+  'foot.save': 'حفظ التقييم',
+  'foot.saving': 'جارٍ الحفظ…',
+  'foot.category': 'فئة IWGDF',
+  'foot.notStratified': 'غير مُصنَّف',
+  'foot.incompleteTitle': 'لم تُنتَج أي فئة. الفحص غير المُنفَّذ ليس فحصاً سلبياً.',
+  'foot.nextScreening': 'الفحص القادم',
+  'foot.interval': 'الفترة',
+  'inv.title': 'نتائج الفحوصات',
+  'inv.notInterpreted':
+    'مخزَّن، غير مُفسَّر. لم يقرأ قَدَم هذه المستندات ولم يُنتج منها أي نتيجة أو درجة أو رأي. تُحفظ هنا ليرى الطبيب الذي طلب الفحص النتيجة بجوار الإحالة التي أدت إليها.',
+  'inv.closesLoop':
+    'قراءة دراسة أشعة تتطلب الدراسة كاملة والسياق السريري والصور السابقة ومختصاً مدرَّباً. لا تملك هذه المنصة أياً منها، لذا تحفظ النتيجة بدل ادعاء قراءتها.',
+  'inv.none': 'لا توجد نتائج محفوظة لهذه الحالة بعد.',
+  'inv.add': 'حفظ نتيجة',
+  'inv.category': 'الفئة',
+  'inv.modality': 'نوع التصوير',
+  'inv.bodySite': 'موضع الجسم',
+  'inv.service': 'الجهة المُصدِرة للتقرير',
+  'inv.serviceHint': 'القسم أو الخدمة — لا اسم شخص.',
+  'inv.reportText': 'نص التقرير',
+  'inv.file': 'مستند (PDF أو JPEG أو PNG أو WebP أو نص)',
+  'inv.fileHint':
+    'ملفات DICOM غير مقبولة: ترويساتها تحمل اسم المريض وتاريخ ميلاده ورقم الفحص، ما يكسر السرية المستعارة لهذا السجل. صدِّر PDF أو صورة مجهولة الهوية من نظام PACS.',
+  'inv.ack':
+    'أؤكد إزالة أو تغطية المعرِّفات. التقارير ولقطات الشاشة تُظهر عادةً اسم المريض وتاريخ ميلاده ورقم الفحص، وهذه المنصة تخزّن سجلات مستعارة فقط.',
+  'inv.save': 'حفظ النتيجة',
+  'inv.saving': 'جارٍ الحفظ…',
+  'inv.openFile': 'فتح المستند',
+  'lab.panelName': 'اسم اللوحة (اختياري)',
+  'lab.age': 'العمر',
+  'lab.sex': 'الجنس',
+  'lab.ageHint':
+    'يُستخدم العمر والجنس للنطاقات المرجعية الخاصة بالجنس ولحساب eGFR وFIB-4. إذا تُركا فارغين يُؤخذان من سجل المريض، ولا تُحتسب هذه المؤشرات إن كان العمر مجهولاً.',
+  'lab.addAnalyte': 'أضف تحليلاً',
+  'lab.choose': 'اختر…',
+  'lab.noRows': 'لم تُضف أي تحاليل بعد.',
+  'lab.reference': 'المرجع',
+  'lab.save': 'حفظ وتفسير',
+  'lab.saving': 'جارٍ الحفظ…',
+  'lab.results': 'النتائج',
+  'lab.analyte': 'التحليل',
+  'lab.value': 'القيمة',
+  'lab.flag': 'العلامة',
+  'lab.asEntered': 'كما أُدخلت',
+  'lab.critical': 'حرج',
+  'lab.notFlagged': 'بلا علامة',
+  'lab.analytes': 'تحاليل',
+  'lab.flagged': 'معلَّمة',
+  'lab.derived': 'المؤشرات المشتقة',
+  'lab.unrecognised': 'مخزَّن دون تفسير',
+  'lab.addPanel': 'إضافة نتائج مختبر',
+  'lab.needCase': 'أنشئ سجل المريض أعلاه أولاً.',
+  'lab.panels': 'لوحات المختبر',
+  'lab.noPanels': 'لا توجد نتائج مختبر مرفقة بهذه الحالة بعد.',
+  'lab.attachHint':
+    'يمكن إرفاق النتائج بأي حالة، فحالة التصوير التي وجّهت لتحاليل دم يمكنها الاحتفاظ بما عاد منها.',
+  'emergency.whyStatic': 'لماذا لا تعرض هذه الصفحة شيئاً عن مريضك',
+  'emergency.moveOnlyIf': 'حرّكه فقط إذا',
+  'clinical.title': 'اعتبارات سريرية للطبيب المراجِع',
+  'clinical.considerations': 'ما يتوافق معه هذا النمط',
+  'clinical.overlapsWith': 'هذا النمط يتقاطع مع كل ما يلي:',
+  'clinical.distinguishedBy': 'يُميَّز بواسطة',
+  'clinical.immediateActions': 'خطوات وقائية فورية، بانتظار المراجعة',
+  'clinical.immediateActionsNote':
+    'إجراءات وقائية فقط، تُتخذ أثناء ترتيب الإحالة. لا يُوصى بأي دواء أو إجراء، وهي لا تحل محل خطة الطبيب.',
+  'clinical.askAndCheck': 'اسأل وافحص — هذه ليست في النتيجة',
+  'clinical.askAndCheckNote':
+    'غالباً ما تكون أهم من الصورة. سجّل الإجابات مع الحالة.',
+  'clinical.notAssessable': 'غير قابل للتقييم مما قُدِّم',
+
+  'followUp.title': 'إجابات لا تستطيع الكاميرا تقديمها',
+  'followUp.intro':
+    'هذه هي المعطيات التي تحسم الحالة ولا تحتويها أي صورة. أجب عمّا فحصته فعلاً، واترك الباقي فارغاً.',
+  'followUp.rule':
+    'الإجابات قد ترفع درجة الاستعجال، ولا تخفضها أبداً — لا تُسحب علامة مقيسة من الصورة لأن فحصاً ذُكر أنه طبيعي.',
+  'followUp.notes': 'ملاحظات سريرية',
+  'followUp.notesHint':
+    'نص حر. يُحفظ ويُعرض كما كُتب تماماً، ويُدرج في ملف PDF. لا يُحلَّل ولا يُقيَّم ولا يُستخدم كمدخل لأي نموذج.',
+  'followUp.notesPlaceholder':
+    'القصة المرضية، نتائج الفحص، ما قمت به بالفعل، وما تسأل عنه الطبيب المراجِع…',
+  'followUp.submit': 'حفظ وإعادة التقييم',
+  'followUp.saving': 'جارٍ إعادة التقييم…',
+  'followUp.reset': 'مسح الإجابات',
+  'followUp.open': 'أجب عن أسئلة المتابعة',
+  'followUp.why': 'سبب طرح هذا السؤال',
+  'followUp.answered': 'مُجاب',
+  'followUp.unanswered': 'بدون إجابة',
+  'followUp.imageGrade': 'من الصورة',
+  'followUp.answerGrade': 'من إجاباتك',
+  'followUp.combined': 'الدرجة المجمَّعة',
+  'followUp.escalated': 'ارتفعت الدرجة بسبب إجاباتك',
+  'followUp.notEscalated': 'لم ترفع إجاباتك الدرجة.',
+  'followUp.triggers': 'ما رفعته إجاباتك',
+  'followUp.because': 'لماذا يهم',
+  'followUp.consider': 'ضع في الاعتبار',
+  'followUp.distinguishedBy': 'يُميَّز بواسطة',
+  'followUp.history': 'إدخالات المتابعة السابقة',
+  'followUp.recordedBy': 'سُجِّل',
+  'followUp.noEntries': 'لم تُسجَّل أي إجابات متابعة لهذه الحالة.',
+  'followUp.emptyAnswers': 'أجب عن سؤال واحد على الأقل، أو اكتب ملاحظة، قبل الحفظ.',
+  'followUp.queued':
+    'لا يوجد اتصال — حُفظت إجاباتك على هذا الجهاز وستُرسل عند عودة الاتصال. تُجرى إعادة التقييم على الخادم، لذا لا تظهر درجة مجمَّعة بعد.',
+  'followUp.blank': '—',
+  'followUp.opt.yes': 'نعم',
+  'followUp.opt.no': 'لا',
+  'followUp.opt.unknown': 'غير معروف',
+  'followUp.opt.not_tested': 'لم يُفحص',
+  'followUp.opt.not_applicable': 'لا ينطبق',
+  'followUp.opt.both_palpable': 'كلاهما محسوس',
+  'followUp.opt.one_absent': 'أحدهما غائب',
+  'followUp.opt.both_absent': 'كلاهما غائب',
+  'followUp.opt.intact': 'سليم',
+  'followUp.opt.reduced': 'منخفض',
+  'followUp.opt.absent': 'غائب',
+
+  'calib.title': 'مرجع اللون',
+  'calib.applied': 'مُعايَر مقابل بطاقة مرجعية',
+  'calib.notDetected': 'لا توجد بطاقة مرجعية في هذه الصورة',
+  'calib.unusable': 'عُثر على بطاقة مرجعية لكنها غير صالحة للاستخدام',
+  'calib.shift': 'انحراف الإضاءة المُصحَّح',
+  'calib.howTo': 'كيفية استخدام البطاقة المرجعية',
+  'calib.why':
+    'لون الصورة في الهاتف تحدده إضاءة الغرفة أكثر مما يحدده المريض. وجود بطاقة رمادية أو بيضاء محايدة في الإطار يجعل صورة اليوم قابلة للمقارنة مع صورة الأسبوع الماضي.',
+
+  'delete.title': 'حذف هذه الحالة',
+  'delete.warn':
+    'هذا يُتلف الصور نهائياً وكل تقييم مُشتق منها. لا توجد سلة محذوفات ولا يمكن التراجع.',
+  'delete.keeps':
+    'يُحتفظ بسجل المريض المُرمَّز، وكذلك بقيد التدقيق الذي يسجّل حذف هذه الحالة. ولا يحمل أيٌّ منهما معرِّف مريض أو أي محتوى سريري.',
+  'delete.button': 'حذف الحالة',
+  'delete.confirmPrompt': 'اكتب DELETE للتأكيد',
+  'delete.confirmWord': 'DELETE',
+  'delete.confirm': 'حذف نهائي',
+  'delete.cancel': 'إلغاء',
+  'delete.working': 'جارٍ الحذف…',
+  'delete.done': 'تم حذف الحالة.',
+  'delete.removed': 'أُزيل',
+
+  'result.triage': 'الفرز',
+  'result.confidence': 'مستوى الثقة',
+  'result.nextStep': 'الخطوة التالية الموصى بها',
+  'result.routeTo': 'التوجيه إلى',
+  'result.timeframe': 'الإطار الزمني',
+  'result.findings': 'السمات السطحية المكتشفة',
+  'result.noFindings': 'لم تُعزل أي سمة سطحية واضحة في هذه الصورة.',
+  'result.rationale': 'أساس هذه الدرجة',
+  'result.quality': 'جودة الصورة',
+  'result.limitations': 'ما لم يُقيَّم / القيود',
+  'result.overlay': 'الصورة الموسومة',
+  'result.pdf': 'تنزيل ملخص الطبيب (PDF)',
+  'result.summary': 'ملخص الطبيب',
+  'result.model': 'النموذج',
+  'result.newCase': 'بدء حالة أخرى',
+  'result.openCase': 'فتح الحالة',
+  'result.area': 'المساحة',
+  'result.severity': 'الشدة',
+
+  'quality.rejected': 'رُفضت الصورة — يرجى إعادة الالتقاط',
+  'quality.passed': 'مقبولة',
+  'quality.degraded': 'منخفضة',
+  'quality.check.resolution': 'الدقة',
+  'quality.check.focus': 'التركيز',
+  'quality.check.exposure': 'التعريض',
+  'quality.check.subject_present': 'وجود الهدف في الإطار',
+  'quality.measured': 'المقاس',
+  'quality.threshold': 'الحد',
+
+  'cases.title': 'الحالات',
+  'cases.module': 'الوحدة',
+  'cases.grade': 'الدرجة',
+  'cases.patient': 'رمز المريض',
+  'cases.created': 'تاريخ الإنشاء',
+  'cases.status': 'الحالة',
+  'cases.analyses': 'التحاليل',
+  'cases.none': 'لا توجد حالات مطابقة.',
+  'cases.all': 'الكل',
+  'cases.filter': 'تصفية',
+
+  'case.title': 'الحالة',
+  'case.latest': 'أحدث تحليل',
+  'case.history': 'تحاليل سابقة',
+  'case.compare': 'المقارنة عبر الزمن',
+  'case.compareHint':
+    'مقارنة جنباً إلى جنب لنفس الحالة. قد تعكس الفروق الحالة نفسها أو الإضاءة أو التأطير — والطبيب هو من يقرر.',
+  'case.noHistory': 'لا يوجد تحليل سابق للمقارنة بعد.',
+  'case.back': 'العودة إلى الحالات',
+
+  'fairness.title': 'الإنصاف (نموذج أولي)',
+  'fairness.group': 'فئة مقياس مونك للون البشرة',
+  'fairness.analyses': 'التحاليل',
+  'fairness.meanConfidence': 'متوسط الثقة المُبلَّغ عنها',
+  'fairness.qualityPass': 'نسبة اجتياز الجودة',
+  'fairness.coverage': 'سُجِّل لون البشرة لـ',
+  'fairness.ofAnalyses': 'من التحاليل',
+
+  'common.loading': 'جارٍ التحميل…',
+  'common.error': 'حدث خطأ',
+  'common.hint': 'ما ينبغي فعله',
+  'common.close': 'إغلاق',
+  'common.required': 'مطلوب',
+  'common.notRecorded': 'غير مسجَّل',
+  'common.intendedUse': 'الاستخدام المقصود',
+}
+
+const DICTS: Record<Lang, Dict> = { en, ar }
+const LANG_KEY = 'qadam.lang'
+
+interface I18nValue {
+  lang: Lang
+  dir: 'ltr' | 'rtl'
+  t: (key: string) => string
+  setLang: (lang: Lang) => void
+  toggle: () => void
+}
+
+const I18nContext = createContext<I18nValue | null>(null)
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [lang, setLangState] = useState<Lang>(
+    () => (localStorage.getItem(LANG_KEY) as Lang) ?? 'en',
+  )
+  const dir: 'ltr' | 'rtl' = lang === 'ar' ? 'rtl' : 'ltr'
+
+  useEffect(() => {
+    document.documentElement.lang = lang
+    document.documentElement.dir = dir
+    localStorage.setItem(LANG_KEY, lang)
+  }, [lang, dir])
+
+  const setLang = useCallback((next: Lang) => setLangState(next), [])
+  const toggle = useCallback(
+    () => setLangState((cur) => (cur === 'en' ? 'ar' : 'en')),
+    [],
+  )
+  const t = useCallback(
+    (key: string) => DICTS[lang][key] ?? DICTS.en[key] ?? key,
+    [lang],
+  )
+
+  const value = useMemo(
+    () => ({ lang, dir, t, setLang, toggle }),
+    [lang, dir, t, setLang, toggle],
+  )
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
+}
+
+export function useI18n(): I18nValue {
+  const ctx = useContext(I18nContext)
+  if (!ctx) throw new Error('useI18n must be used inside I18nProvider')
+  return ctx
+}
