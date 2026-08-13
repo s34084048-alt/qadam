@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     data_residency: str = "UAE"
     require_consent: bool = True
 
+    # --- single-origin hosting ----------------------------------------------
+    # Path to a built web bundle. When set, the API serves the app from its own
+    # origin, so /api requests are same-origin: no CORS, and no bearer token
+    # crossing an origin boundary. Empty means API only (docker compose puts
+    # nginx in front, and the dev server proxies).
+    serve_web_dir: str = ""
+
     # --- seeding -------------------------------------------------------------
     seed_admin_email: str = "admin@qadam.local"
     seed_admin_password: str = "qadam-admin"

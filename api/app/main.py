@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from .config import settings
 from .db import create_schema
@@ -154,7 +156,31 @@ app.include_router(follow_up.info_router, prefix=prefix)
 app.include_router(admin.router, prefix=prefix)
 
 
-@app.get("/", include_in_schema=False)
+def resolve_web_asset(web_root: Path, full_path: str) -> Path:
+    """Which file answers a request under a single-origin web mount.
+
+    A real file inside the bundle, or index.html. The fallback is what a
+    client-side router needs: `/cases/<uuid>` is a route in the browser, not a
+    file on disk, and refreshing that URL must not 404. StaticFiles alone will
+    not do it — its `html=True` only covers directory paths.
+
+    The containment check is the security-relevant half. `..` segments survive
+    URL decoding, so without resolving the candidate and confirming it is still
+    inside the bundle, a crafted path walks out and reads arbitrary files from
+    the container — application source and anything else the process can open.
+    """
+    index = web_root / "index.html"
+    if not full_path:
+        return index
+    try:
+        candidate = (web_root / full_path).resolve()
+    except (OSError, ValueError):        # malformed or over-long path
+        return index
+    if candidate.is_file() and candidate.is_relative_to(web_root):
+        return candidate
+    return index
+
+
 async def root() -> dict:
     return {
         "name": "QADAM",
@@ -165,3 +191,27 @@ async def root() -> dict:
         "docs": "/docs",
         "api": prefix,
     }
+
+
+# Registered LAST so nothing here can shadow the API or /docs.
+#
+# When SERVE_WEB_DIR is set the web app owns "/", and the JSON landing payload
+# above is not registered at all -- two different things cannot both answer the
+# same path, and on a single-origin host the browser asking for "/" wants the
+# app, not a description of the API.
+_web_dir = Path(settings.serve_web_dir) if settings.serve_web_dir else None
+
+if _web_dir is not None and not _web_dir.is_dir():
+    logging.getLogger(__name__).warning(
+        "SERVE_WEB_DIR=%s does not exist; serving the API only.", _web_dir
+    )
+    _web_dir = None
+
+if _web_dir is None:
+    app.get("/", include_in_schema=False)(root)
+else:
+    _web_root = _web_dir.resolve()
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa(full_path: str) -> FileResponse:
+        return FileResponse(resolve_web_asset(_web_root, full_path))

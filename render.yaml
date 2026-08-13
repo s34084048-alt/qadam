@@ -18,7 +18,7 @@ databases:
   - name: qadam-db
     databaseName: qadam
     user: qadam
-    plan: basic-256mb
+    plan: free          # free Postgres is DELETED after 30 days
 
 services:
   - type: web
@@ -26,7 +26,7 @@ services:
     runtime: docker
     dockerfilePath: ./api/Dockerfile
     dockerContext: ./api
-    plan: starter          # 512 MB. OpenCV import alone needs ~150 MB.
+    plan: free         # sleeps after ~15 min idle; ~1 min cold start
     healthCheckPath: /api/v1/health
     envVars:
       - key: ENVIRONMENT

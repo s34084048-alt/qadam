@@ -3,20 +3,30 @@
 **NOT A MEDICAL DEVICE — not for clinical use.** Anything reachable at the
 resulting URL is on the public internet. Seed synthetic data only.
 
-## Shape of it
+## Two ways, both single-origin
+
+**Free, no card — one container serves everything (Hugging Face Spaces):**
 
 ```
-  phone / browser
-        │  https://qadam.vercel.app
-        ▼
-  Vercel  ── static React bundle
-        │  /api/*  rewritten, same origin
-        ▼
-  container host ── FastAPI + OpenCV  ──►  managed Postgres
+  phone / browser ──► Space ── FastAPI + OpenCV + built web bundle
+                               SQLite + local files, both EPHEMERAL
 ```
 
-The web app talks to `/api` on **its own origin**; Vercel proxies that to the
-API. So no CORS, and no bearer token ever crosses an origin boundary.
+**Paid — split, with a real database:**
+
+```
+  phone / browser ──► Vercel (static bundle)
+                        │  /api/* rewritten
+                        ▼
+                      container host ── FastAPI ──► managed Postgres
+```
+
+Either way the web app talks to `/api` on **its own origin**, so there is no
+CORS and no bearer token ever crosses an origin boundary. In the first that is
+because one process serves both; in the second because Vercel proxies.
+
+Start with the free one. Nothing about the split version is a code change —
+`SERVE_WEB_DIR` on or off is the whole difference.
 
 ## Why the API is not on Vercel too
 
@@ -45,34 +55,50 @@ business decision, not a security one. What a public repository does change is
 that anyone can clone this and stand it up: it is **not validated**, and the
 boundary in the README and in every payload is what travels with it.
 
-### 2. Deploy the API
+### 2a. Free: Hugging Face Spaces
 
-Render (free-ish, `render.yaml` provisions the API and Postgres together):
-New → Blueprint → select the repository. It reads `render.yaml`, generates
-every secret, runs the migrations and seeds synthetic demo cases.
+Free, needs no payment card, and the URL stays up. On the free CPU tier a Space
+sleeps only after about 48 hours idle and wakes on the next request.
 
-Railway is the smoother paid alternative (~$5/month, no cold starts): New →
-Deploy from repo → root `api/`, add a Postgres plugin, and set the same
-variables `render.yaml` lists.
+1. Create an account at huggingface.co, then **New Space**:
+   - SDK **Docker** → *blank*, hardware **CPU basic (free)**
+2. Add the repository as a second remote and push:
 
-Confirm it is alive:
+   ```bash
+   git remote add space https://huggingface.co/spaces/<user>/qadam
+   git push space main
+   ```
+
+3. **Settings → Variables and secrets**, add three *secrets*:
+   `JWT_SECRET`, `SEED_ADMIN_PASSWORD`, `SEED_CLINICIAN_PASSWORD` — any long
+   random strings. The Space will not start without them; that is deliberate,
+   see below.
+
+The root `Dockerfile` builds the web bundle and the API into one image and
+serves both on port 7860.
+
+### 2b. Paid: split deployment
+
+Put the API on any container host that takes a Dockerfile (Railway ≈ $5/month
+is the smoothest; Render's blueprint is in `render.yaml`, but note its free
+Postgres is deleted after 30 days and its free web service sleeps after 15
+minutes). Build `api/Dockerfile`, attach a managed Postgres, and set the
+variables listed in `render.yaml`. Leave `SERVE_WEB_DIR` unset.
+
+Then in `web/vercel.json` replace `REPLACE-WITH-API-HOST` with the API
+hostname, and deploy `web/` to Vercel.
+
+### 3. Confirm and sign in
 
 ```bash
-curl https://<api-host>/api/v1/health
+curl https://<host>/api/v1/health
 ```
 
 It must answer `"clinical_use": false`.
 
-### 3. Point the web at it
-
-In `web/vercel.json` replace `REPLACE-WITH-API-HOST` with the API hostname
-(no scheme, no trailing slash), then deploy `web/` to Vercel.
-
-### 4. Sign in
-
 `ENVIRONMENT=prod` hides the demo-account panel, so the seeded credentials are
-not printed on the login page. Read the generated `SEED_CLINICIAN_PASSWORD`
-from the host's environment tab and sign in with `clinician@qadam.app`.
+not printed on the login page. Sign in as `clinician@qadam.app` with whatever
+you set `SEED_CLINICIAN_PASSWORD` to.
 
 ## What the deployment refuses to do
 
@@ -86,11 +112,11 @@ boot instead.
 
 ## Known limits of this deployment
 
-- **Images do not survive a restart.** `STORAGE_BACKEND=local` writes to the
-  instance's own ephemeral filesystem. Fine for a demo, nothing else. For
-  durability attach a disk, or set `STORAGE_BACKEND=s3` with the `S3_*`
-  variables pointing at Cloudflare R2 or S3.
-- **Render's free tier sleeps** after about 15 minutes idle; the next request
-  waits roughly a minute while the container starts. If the link must be
-  instant when someone opens it, use the paid tier or Railway.
+- **On the free Space, everything resets.** The database is SQLite and the
+  images are on the container's own filesystem; a restart or a rebuild wipes
+  both, and `SEED_ON_START=true` refills it with synthetic cases. Fine for a
+  demo and for nothing else. For durability move to 2b, or set
+  `STORAGE_BACKEND=s3` with the `S3_*` variables pointing at Cloudflare R2.
+- **Cold starts are slow.** OpenCV import plus the first analysis on a woken
+  Space takes a few seconds. If the link must be instant, that is 2b.
 - **It is still not validated.** A permanent URL changes nothing about that.
