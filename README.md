@@ -1,18 +1,3 @@
----
-title: QADAM
-emoji: 🦶
-colorFrom: blue
-colorTo: gray
-sdk: docker
-app_port: 7860
-pinned: false
-short_description: Surface screening and triage routing. NOT A MEDICAL DEVICE.
----
-
-<!-- The block above is metadata for Hugging Face Spaces, which reads it from
-     the top of this file. GitHub renders it as a small table; that is the
-     whole cost of having one repository deploy to a free host. -->
-
 # QADAM — visual triage platform
 
 > **NOT A MEDICAL DEVICE — not for clinical use.**

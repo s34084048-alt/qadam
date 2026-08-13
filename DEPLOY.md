@@ -3,30 +3,37 @@
 **NOT A MEDICAL DEVICE — not for clinical use.** Anything reachable at the
 resulting URL is on the public internet. Seed synthetic data only.
 
-## Two ways, both single-origin
-
-**Free, no card — one container serves everything (Hugging Face Spaces):**
+## One service, one URL
 
 ```
-  phone / browser ──► Space ── FastAPI + OpenCV + built web bundle
-                               SQLite + local files, both EPHEMERAL
+  phone / browser ──► container host
+                        FastAPI + OpenCV + the built web bundle
+                        SQLite + local files, both EPHEMERAL
 ```
 
-**Paid — split, with a real database:**
+The root `Dockerfile` builds the web app and the API into one image and serves
+both from the same origin, so `/api` is same-origin: no CORS, and no bearer
+token ever crosses an origin boundary. One host, one URL, nothing to proxy.
 
-```
-  phone / browser ──► Vercel (static bundle)
-                        │  /api/* rewritten
-                        ▼
-                      container host ── FastAPI ──► managed Postgres
-```
+Splitting it later (static bundle on Vercel or Netlify, API elsewhere) is a
+configuration change, not a code change: leave `SERVE_WEB_DIR` unset and put
+the API hostname in `web/vercel.json`.
 
-Either way the web app talks to `/api` on **its own origin**, so there is no
-CORS and no bearer token ever crosses an origin boundary. In the first that is
-because one process serves both; in the second because Vercel proxies.
+## Where it can and cannot run
 
-Start with the free one. Nothing about the split version is a code change —
-`SERVE_WEB_DIR` on or off is the whole difference.
+The API needs a **container**. It imports OpenCV, holds a connection pool, and
+spends real CPU per analysis.
+
+| Host | Verdict |
+| --- | --- |
+| Render, free web service | Works. Sleeps after ~15 min idle. |
+| Koyeb / Railway / Fly | Work. Railway and Fly want a card. |
+| **Hugging Face Spaces** | **Docker Spaces now need a paid PRO plan.** Static Spaces are free but cannot run Python. |
+| **Netlify / Vercel / GitHub Pages** | **Static hosting only.** They serve the UI; every `/api` call 404s. |
+
+A static host gives a live URL where the interface renders and nothing works —
+no sign-in, no analysis. The entire analysis is server-side Python: subject
+segmentation, LAB colour statistics, `distanceTransform`, pupil measurement.
 
 ## Why the API is not on Vercel too
 
@@ -55,38 +62,18 @@ business decision, not a security one. What a public repository does change is
 that anyone can clone this and stand it up: it is **not validated**, and the
 boundary in the README and in every payload is what travels with it.
 
-### 2a. Free: Hugging Face Spaces
+### 2. Deploy
 
-Free, needs no payment card, and the URL stays up. On the free CPU tier a Space
-sleeps only after about 48 hours idle and wakes on the next request.
+**Render → New → Blueprint → select the repository → Apply.**
 
-1. Create an account at huggingface.co, then **New Space**:
-   - SDK **Docker** → *blank*, hardware **CPU basic (free)**
-2. Add the repository as a second remote and push:
+`render.yaml` describes one free web service built from the root `Dockerfile`,
+generates the three secrets, and provisions no database — it runs on SQLite
+inside the instance, so there is nothing that expires. The first build takes
+5–10 minutes, mostly installing OpenCV.
 
-   ```bash
-   git remote add space https://huggingface.co/spaces/<user>/qadam
-   git push space main
-   ```
-
-3. **Settings → Variables and secrets**, add three *secrets*:
-   `JWT_SECRET`, `SEED_ADMIN_PASSWORD`, `SEED_CLINICIAN_PASSWORD` — any long
-   random strings. The Space will not start without them; that is deliberate,
-   see below.
-
-The root `Dockerfile` builds the web bundle and the API into one image and
-serves both on port 7860.
-
-### 2b. Paid: split deployment
-
-Put the API on any container host that takes a Dockerfile (Railway ≈ $5/month
-is the smoothest; Render's blueprint is in `render.yaml`, but note its free
-Postgres is deleted after 30 days and its free web service sleeps after 15
-minutes). Build `api/Dockerfile`, attach a managed Postgres, and set the
-variables listed in `render.yaml`. Leave `SERVE_WEB_DIR` unset.
-
-Then in `web/vercel.json` replace `REPLACE-WITH-API-HOST` with the API
-hostname, and deploy `web/` to Vercel.
+Any other container host works the same way: build the root `Dockerfile`, set
+`ENVIRONMENT=prod`, and supply `JWT_SECRET`, `SEED_ADMIN_PASSWORD` and
+`SEED_CLINICIAN_PASSWORD`. The image reads `$PORT` and falls back to 7860.
 
 ### 3. Confirm and sign in
 
@@ -112,11 +99,14 @@ boot instead.
 
 ## Known limits of this deployment
 
-- **On the free Space, everything resets.** The database is SQLite and the
-  images are on the container's own filesystem; a restart or a rebuild wipes
-  both, and `SEED_ON_START=true` refills it with synthetic cases. Fine for a
-  demo and for nothing else. For durability move to 2b, or set
-  `STORAGE_BACKEND=s3` with the `S3_*` variables pointing at Cloudflare R2.
-- **Cold starts are slow.** OpenCV import plus the first analysis on a woken
-  Space takes a few seconds. If the link must be instant, that is 2b.
+- **Everything resets.** The database is SQLite and the images are on the
+  container's own filesystem; a restart or a redeploy wipes both, and
+  `SEED_ON_START=true` refills it with synthetic cases. Fine for a demo and
+  for nothing else. For durability, attach a managed database and set
+  `DATABASE_URL`, and set `STORAGE_BACKEND=s3` with the `S3_*` variables
+  pointing at Cloudflare R2 — neither is a code change.
+- **On a free instance the first visit is slow.** It sleeps after about 15
+  minutes idle, and waking it plus importing OpenCV takes roughly a minute.
+  If the link has to be instant when someone opens it — a live pitch — that is
+  the one thing worth paying for.
 - **It is still not validated.** A permanent URL changes nothing about that.

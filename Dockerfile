@@ -79,10 +79,18 @@ ENV DATABASE_URL="sqlite+aiosqlite:////home/qadam/qadam.db" \
 
 EXPOSE 7860
 HEALTHCHECK --interval=20s --timeout=4s --start-period=40s --retries=5 \
-    CMD curl -fsS http://localhost:7860/api/v1/health || exit 1
+    CMD curl -fsS "http://localhost:${PORT:-7860}/api/v1/health" || exit 1
 
+# Shell form on purpose: hosts disagree about which port to listen on, and
+# they say so in the environment. Render injects $PORT; a Space expects the
+# port its README declares. One image satisfies both rather than one image
+# per host.
+#
+# One worker by default. On a 512 MB free instance a second worker means a
+# second copy of OpenCV resident, and the analysis is CPU-bound anyway.
 ENTRYPOINT ["./docker-entrypoint.sh"]
-CMD ["gunicorn", "app.main:app", \
-     "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--workers", "1", "--bind", "0.0.0.0:7860", \
-     "--timeout", "180", "--access-logfile", "-"]
+CMD ["sh", "-c", "exec gunicorn app.main:app \
+     --worker-class uvicorn.workers.UvicornWorker \
+     --workers ${WEB_CONCURRENCY:-1} \
+     --bind 0.0.0.0:${PORT:-7860} \
+     --timeout 180 --access-logfile -"]
