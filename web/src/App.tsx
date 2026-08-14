@@ -72,10 +72,33 @@ function Shell({ onSignOut, safety }: { onSignOut: () => void; safety: SafetyBlo
 export default function App() {
   const [signedIn, setSignedIn] = useState(Boolean(session.token))
   const [safety, setSafety] = useState<SafetyBlock | null>(null)
+  const [entering, setEntering] = useState(false)
 
   useEffect(() => {
     api.safety().then(setSafety).catch(() => setSafety(null))
   }, [])
+
+  // Open access with no sign-in screen at all: when the server reports demo
+  // mode and there is no session yet, start one and go straight in.
+  //
+  // This removes a form, not a boundary. Each visitor still gets their OWN
+  // organisation, so nobody sees anybody else's patients, cases or images —
+  // that isolation is what makes open access defensible, and it is unchanged.
+  // If it fails for any reason the sign-in form is still there underneath.
+  useEffect(() => {
+    if (signedIn) return
+    let cancelled = false
+    setEntering(true)
+    api.health()
+      .then(async (h) => {
+        if (cancelled || !h.demo_mode) return
+        await api.startDemo()
+        if (!cancelled) setSignedIn(true)
+      })
+      .catch(() => { /* fall through to the sign-in form */ })
+      .finally(() => { if (!cancelled) setEntering(false) })
+    return () => { cancelled = true }
+  }, [signedIn])
 
   function signOut() {
     session.clear()
@@ -88,7 +111,9 @@ export default function App() {
       <OfflineBar />
       {signedIn
         ? <Shell onSignOut={signOut} safety={safety} />
-        : <Login onDone={() => setSignedIn(true)} />}
+        : entering
+          ? <main><p className="hint">Starting…</p></main>
+          : <Login onDone={() => setSignedIn(true)} />}
     </BrowserRouter>
   )
 }
