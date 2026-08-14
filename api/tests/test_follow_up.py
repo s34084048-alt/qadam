@@ -355,3 +355,85 @@ async def test_follow_up_for_an_unknown_case_is_404(client, auth):
         json={"answers": {"rest_pain": "yes"}},
     )
     assert resp.status_code == 404
+
+
+# --- combination rules from the clinical specification ------------------------
+
+def test_ulcer_with_absent_pulse_and_rest_pain_is_the_ischaemia_pattern():
+    outcome = followup.evaluate("foot", {
+        "open_ulcer": "yes", "pedal_pulses": "both_absent", "rest_pain": "yes"})
+    assert outcome.answer_grade is Grade.URGENT
+    pattern = next(t for t in outcome.triggers
+                   if "absent pulse and rest pain" in t.finding)
+    assert "threatened limb" in pattern.because
+    assert "BEFORE any local wound procedure" in pattern.distinguished_by
+
+
+def test_ulcer_with_pus_and_fever_is_the_infection_pattern():
+    outcome = followup.evaluate("foot", {
+        "open_ulcer": "yes", "systemic_signs": "yes",
+        "purulent_discharge": "yes"})
+    assert outcome.answer_grade is Grade.URGENT
+    pattern = next(t for t in outcome.triggers
+                   if t.finding.startswith("Open ulcer with pus"))
+    assert "probe-to-bone" in pattern.distinguished_by
+
+
+def test_pus_without_a_recorded_ulcer_asks_where_it_is_coming_from():
+    outcome = followup.evaluate("foot", {"purulent_discharge": "yes"})
+    trigger = next(t for t in outcome.triggers if "coming from" in t.because)
+    assert "beneath callus" in " ".join(trigger.consider)
+
+
+@pytest.mark.parametrize("hba1c,expected", [(6.5, Grade.NO_FLAG),
+                                            (9.0, Grade.REVIEW),
+                                            (11.2, Grade.REVIEW)])
+def test_glycaemic_control_is_an_input_the_foot_cannot_provide(hba1c, expected):
+    assert followup.evaluate(
+        "foot", {"glycaemic_control": hba1c}).answer_grade is expected
+
+
+# --- the contraindication -----------------------------------------------------
+
+def test_debridement_is_prohibited_when_the_foot_is_not_perfused():
+    """A CONTRAINDICATION, not a recommendation. This platform never says what
+    to do TO a wound; it can say what must not be done, because sharp
+    debridement of an unperfused foot creates a defect the circulation cannot
+    close."""
+    for pulses in ("both_absent", "one_absent"):
+        outcome = followup.evaluate(
+            "foot", {"open_ulcer": "yes", "pedal_pulses": pulses})
+        prohibition = next(t for t in outcome.triggers
+                           if t.finding.startswith("DO NOT debride"))
+        assert "not perfused" in prohibition.because
+        assert "belongs to the clinician" in prohibition.distinguished_by
+
+
+def test_nothing_ever_recommends_debridement():
+    """The prohibition has no positive counterpart. With good pulses the
+    platform says nothing about procedures at all — choosing to debride is a
+    clinical decision made by someone holding the foot."""
+    outcome = followup.evaluate(
+        "foot", {"open_ulcer": "yes", "pedal_pulses": "both_palpable",
+                 "systemic_signs": "no"})
+    for trigger in outcome.triggers:
+        blob = " ".join([trigger.finding, trigger.because,
+                         trigger.distinguished_by, *trigger.consider]).lower()
+        assert "debride" not in blob or "do not debride" in blob
+
+
+def test_no_rule_recommends_a_dressing_or_a_drug():
+    """Asked for in the specification, deliberately not implemented. A
+    photograph cannot support a dressing choice, and the whole regulatory
+    position of this platform rests on never making one."""
+    banned = ("hydrogel", "silver", "foam dressing", "antibiotic",
+              "iv antibiotics", "prescribe")
+    for question in followup.questions_for("foot"):
+        for value in (question.options or [1, 12, 99]):
+            outcome = followup.evaluate("foot", {question.id: value})
+            for trigger in outcome.triggers:
+                blob = " ".join([trigger.finding, trigger.because,
+                                 trigger.distinguished_by,
+                                 *trigger.consider]).lower()
+                for word in banned:
+                    assert word not in blob, f"{question.id}={value}: {word!r}"

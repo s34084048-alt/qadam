@@ -155,6 +155,28 @@ QUESTIONS: dict[str, list[Question]] = {
                 "where every day of continued walking causes further collapse.",
         ),
         Question(
+            "purulent_discharge",
+            "Purulent discharge from the wound",
+            "choice", YESNO,
+            why="Pus is the finding that separates a colonised wound from one "
+                "that is actively infected, and it is not reliably visible in "
+                "a photograph taken through a dressing.",
+        ),
+        Question(
+            "open_ulcer", "Is there an open ulcer — skin broken through?",
+            "choice", YESNO,
+            why="Several of the rules below turn on this, and a photograph "
+                "cannot separate an open wound from callus over intact skin. "
+                "Only a look and a probe can.",
+        ),
+        Question(
+            "glycaemic_control", "Recent HbA1c",
+            "number", unit="%",
+            why="Glycaemic control governs whether any wound closes at all, "
+                "and it is the one input here that no examination of the foot "
+                "itself provides.",
+        ),
+        Question(
             "duration_weeks", "How long has the lesion been present?",
             "number", unit="weeks",
             why="A wound open beyond about a month is not simply healing "
@@ -306,6 +328,98 @@ def _foot_rules(a: dict[str, Any]) -> list[Trigger]:
                       "Test performed at the wrong sites or through callus"],
             distinguished_by="Repeat at standard sites with vibration testing; "
                              "structured risk stratification.",
+        ))
+
+    # --- combination rules -------------------------------------------------
+    # Single findings are handled above. These are the PATTERNS: combinations
+    # that mean more together than the sum of their parts, and that decide
+    # where the patient goes today.
+    ulcer = a.get("open_ulcer") == "yes"
+
+    if ulcer and pulses in ("both_absent", "one_absent") and a.get("rest_pain") == "yes":
+        out.append(Trigger(
+            Grade.URGENT,
+            "Open ulcer with an absent pulse and rest pain.",
+            "Tissue loss, absent perfusion and ischaemic rest pain together "
+            "are the defining pattern of a chronically threatened limb. The "
+            "wound will not close while the perfusion does not support it.",
+            consider=["Chronic limb-threatening ischaemia",
+                      "Neuroischaemic ulcer",
+                      "Infection on a background of poor perfusion"],
+            distinguished_by="Urgent vascular assessment — Doppler waveforms, "
+                             "ankle and toe pressures — BEFORE any local wound "
+                             "procedure is considered.",
+        ))
+
+    if ulcer and a.get("systemic_signs") == "yes" and (
+            a.get("purulent_discharge") == "yes"
+            or a.get("crepitus_odour_bullae") == "yes"):
+        out.append(Trigger(
+            Grade.URGENT,
+            "Open ulcer with pus or foul odour AND systemic upset.",
+            "Local infection with a systemic response is the combination that "
+            "moves a foot from a clinic problem to a same-day hospital one, "
+            "and it is the setting in which underlying bone involvement is "
+            "most often found.",
+            consider=["Deep soft-tissue infection",
+                      "Bone involvement beneath the ulcer",
+                      "Abscess requiring drainage",
+                      "Systemic sepsis from a foot source"],
+            distinguished_by="Same-day assessment with probe-to-bone, plain "
+                             "radiograph, inflammatory markers and blood "
+                             "cultures, and wound sampling taken properly "
+                             "rather than by surface swab.",
+        ))
+
+    if a.get("purulent_discharge") == "yes" and not ulcer:
+        out.append(Trigger(
+            Grade.REVIEW,
+            "Purulent discharge reported without a recorded open ulcer.",
+            "Pus has to be coming from somewhere. A sinus, a deep space or an "
+            "ulcer hidden under callus are all possibilities that a surface "
+            "look can miss.",
+            consider=["Ulcer concealed beneath callus",
+                      "Sinus tract from a deeper focus",
+                      "Infected fissure or nail fold"],
+            distinguished_by="Direct inspection with callus pared back by a "
+                             "trained clinician, and probing of any opening "
+                             "that is found.",
+        ))
+
+    # A CONTRAINDICATION, not a recommendation. This platform never says what
+    # to do TO a wound. It can say what must not be done, because "do not" is
+    # protective in exactly the way an instruction is not — and this one is the
+    # difference between a wound and an amputation. Sharp debridement of an
+    # ischaemic foot removes tissue that has no blood supply to heal the
+    # resulting defect.
+    if ulcer and pulses in ("both_absent", "one_absent"):
+        out.append(Trigger(
+            Grade.URGENT,
+            "DO NOT debride: an open ulcer with an absent or reduced pulse.",
+            "Debridement of a foot that is not perfused creates a wound the "
+            "circulation cannot close. Perfusion is assessed BEFORE any sharp "
+            "procedure, not after it.",
+            consider=["Perfusion inadequate for any local procedure",
+                      "Pulse absent from oedema or examiner variation",
+                      "Medial arterial calcification masking the true pressure"],
+            distinguished_by="Vascular assessment first — Doppler waveforms, "
+                             "toe pressures. The decision about any procedure "
+                             "belongs to the clinician who has that result.",
+        ))
+
+    hba1c = _num(a, "glycaemic_control")
+    if hba1c is not None and hba1c >= 9.0:
+        out.append(Trigger(
+            Grade.REVIEW,
+            f"HbA1c {hba1c:g}%.",
+            "Glycaemic control at this level works against healing whatever "
+            "is done locally to the wound, and it is not something the foot "
+            "examination or the photograph can show.",
+            consider=["Wound failing to heal on metabolic grounds",
+                      "Concurrent infection driving the glucose up",
+                      "Treatment adherence or regimen no longer adequate"],
+            distinguished_by="Diabetes review alongside the foot care, not "
+                             "after it.",
         ))
 
     weeks = _num(a, "duration_weeks")
