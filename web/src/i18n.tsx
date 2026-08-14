@@ -340,6 +340,11 @@ const en: Dict = {
   'labUpload.filing': 'Filing…',
   'labUpload.filed': 'Report filed against this case.',
 
+  'clarify.title': 'Worth asking before anything else',
+  'clarify.intro':
+    'One or two questions chosen from what this image actually showed. Each names what its answer would settle — the point is an experiment with a result, not advice.',
+  'clarify.settles': 'What the answer settles',
+
   'result.triage': 'Triage',
   'result.confidence': 'Confidence',
   'result.distance': 'Distance from threshold',
@@ -740,6 +745,11 @@ const ar: Dict = {
   'labUpload.file': 'حفظ التقرير',
   'labUpload.filing': 'جارٍ الحفظ…',
   'labUpload.filed': 'حُفظ التقرير في هذه الحالة.',
+
+  'clarify.title': 'يستحق السؤال قبل أي شيء آخر',
+  'clarify.intro':
+    'سؤال أو سؤالان مُختاران مما أظهرته هذه الصورة فعلاً. كل منهما يذكر ما ستحسمه إجابته — المقصود تجربة لها نتيجة، لا نصيحة.',
+  'clarify.settles': 'ما تحسمه الإجابة',
 
   'result.triage': 'الفرز',
   'result.confidence': 'مستوى الثقة',

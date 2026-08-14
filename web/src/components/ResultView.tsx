@@ -255,6 +255,36 @@ export function ColourReference({ analysis }: { analysis: Analysis }) {
   )
 }
 
+/**
+ * The one or two questions that would change this answer.
+ *
+ * Placed high on purpose: on a photograph the most valuable thing the platform
+ * can offer is usually not its own measurement but the ten-second experiment
+ * that tests whether the measurement means anything.
+ */
+export function ClarifyingQuestions({ analysis }: { analysis: Analysis }) {
+  const { t } = useI18n()
+  const questions = analysis.features?.clarifying_questions as
+    { ask: string; settles: string; because: string }[] | undefined
+  if (!questions || questions.length === 0) return null
+
+  return (
+    <section className="card clarify">
+      <h2>{t('clarify.title')}</h2>
+      <p className="hint">{t('clarify.intro')}</p>
+      {questions.map((q) => (
+        <div className="consideration" key={q.ask}>
+          <p><strong>{q.ask}</strong></p>
+          <p className="discriminator">
+            <strong>{t('clarify.settles')}: </strong>{q.settles}
+          </p>
+          {q.because && <p className="hint">{q.because}</p>}
+        </div>
+      ))}
+    </section>
+  )
+}
+
 export function Limitations({ analysis }: { analysis: Analysis }) {
   const { t } = useI18n()
   const { safety } = analysis
@@ -344,6 +374,7 @@ export function ResultView({ analysis, caseId }: { analysis: Analysis; caseId: s
         </ul>
       </section>
 
+      <ClarifyingQuestions analysis={analysis} />
       <ClinicalPanel analysis={analysis} />
       <QualityReadout analysis={analysis} />
       <ColourReference analysis={analysis} />

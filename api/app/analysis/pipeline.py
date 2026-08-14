@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from . import calibration, clinical, cv_utils
+from . import calibration, clarify, clinical, cv_utils
 from .backends import get_backend
 from .overlay import render_overlay
 from .quality import run_quality_gate
@@ -206,6 +206,30 @@ def execute(job: AnalysisJob) -> AnalysisOutput:
         result.triage.rationale.append(
             f"A reference card was seen but not used: {cal.reason}"
         )
+
+    # The one or two questions that would actually change this answer. Built
+    # last, so every measurement and every caveat above is available to them.
+    result.features["clarifying_questions"] = clarify.build(result.features)
+
+    # What the percentages are a percentage OF. When the mask is the whole
+    # frame — a close-up, or a widened segmentation — an area is diluted by
+    # whatever background is in shot, and a diluted number that looks like a
+    # measurement is how something gets missed.
+    subject_px = float(result.features.get("subject_area_px", 0.0))
+    frame_px = float(w * h)
+    covers = subject_px / frame_px if frame_px else 0.0
+    result.features["denominator"] = {
+        "measured_against": "whole frame" if covers > 0.97 else "segmented foot region",
+        "region_share_of_frame": round(covers, 3),
+        "note": (
+            "Percentages are a share of the WHOLE FRAME, because the foot "
+            "could not be separated from the background. Any background in "
+            "shot dilutes them, so an area is understated."
+            if covers > 0.97 else
+            "Percentages are a share of the segmented foot region, not of the "
+            "photograph."
+        ),
+    }
 
     return AnalysisOutput(
         quality=quality,

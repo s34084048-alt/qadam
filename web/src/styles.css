@@ -822,3 +822,7 @@ button.danger:disabled { opacity: .45; }
 
 /* The sentence that replaces a confidence figure on a no-flag result. */
 .no-flag-meaning { margin-top: .5rem; opacity: .95; line-height: 1.45; }
+
+/* The questions worth asking. Given a border because they are the most
+   actionable thing on the page, not a footnote. */
+.clarify { border-inline-start: 4px solid var(--brand); }
