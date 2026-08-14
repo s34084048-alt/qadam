@@ -243,3 +243,57 @@ async def test_investigations_require_authentication(client, auth, ref_factory):
         f"{API}/cases/{case_id}/investigations",
         data={"category": "radiology", "identifiers_removed": "true",
               "report_text": "x"})).status_code == 401
+
+
+# --- laboratory reports ------------------------------------------------------
+
+async def test_a_laboratory_report_can_be_filed(client, auth, ref_factory):
+    """The lab's own printout, beside the typed values. Stored, never read."""
+    case_id = await _case(client, auth, ref_factory, "lab")
+    resp = await client.post(
+        f"{API}/cases/{case_id}/investigations", headers=auth,
+        data={"category": "laboratory", "identifiers_removed": "true",
+              "reporting_service": "Central Laboratory"},
+        files={"file": ("report.pdf", PDF, "application/pdf")},
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["category"] == "laboratory"
+    assert body["automated_interpretation"] is False
+    assert body["has_file"] is True
+
+
+async def test_a_filed_lab_report_produces_no_interpretation(
+    client, auth, ref_factory
+):
+    """Filing the PDF must not create a panel, a grade or a derived index.
+    The numbers are typed with their units on purpose: reading 2.4 mg/dL as
+    2.4 umol/L calls a patient in kidney failure normal."""
+    case_id = await _case(client, auth, ref_factory, "lab")
+    await client.post(
+        f"{API}/cases/{case_id}/investigations", headers=auth,
+        data={"category": "laboratory", "identifiers_removed": "true"},
+        files={"file": ("report.pdf", PDF, "application/pdf")},
+    )
+    panels = (await client.get(f"{API}/cases/{case_id}/labs",
+                               headers=auth)).json()
+    assert panels["total"] == 0
+
+    filed = (await client.get(f"{API}/cases/{case_id}/investigations",
+                              headers=auth)).json()
+    assert filed["total"] == 1
+    assert "not" in filed["interpretation_note"].lower()
+
+
+async def test_a_lab_report_still_needs_the_identifier_acknowledgement(
+    client, auth, ref_factory
+):
+    """A laboratory printout carries the patient's name across the top."""
+    case_id = await _case(client, auth, ref_factory, "lab")
+    resp = await client.post(
+        f"{API}/cases/{case_id}/investigations", headers=auth,
+        data={"category": "laboratory", "identifiers_removed": "false"},
+        files={"file": ("report.pdf", PDF, "application/pdf")},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "identifiers_not_confirmed"

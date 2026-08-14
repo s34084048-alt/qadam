@@ -7,6 +7,7 @@ import { FollowUp } from '../components/FollowUp'
 import { FootRisk } from '../components/FootRisk'
 import { Investigations } from '../components/Investigations'
 import { LabPanelForm } from '../components/LabPanelForm'
+import { LabReportUpload } from '../components/LabReportUpload'
 import { LabPanelView } from '../components/LabPanelView'
 import { OverlayImage, ResultView, TriageCard } from '../components/ResultView'
 import { RoutingCard } from '../components/RoutingCard'
@@ -120,6 +121,12 @@ export function CaseDetail() {
             }}
           />
         )}
+
+        {/* Values are typed and interpreted; the lab's own report is filed
+            beside them and never read. Both, because the referral needs its
+            source attached and a reviewer needs to check the typed numbers
+            against the original. */}
+        <LabReportUpload caseId={caseId} />
       </section>
 
       {panels.map((panel) => (

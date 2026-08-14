@@ -327,6 +327,19 @@ const en: Dict = {
   'progress.days': 'days',
   'progress.excluded': 'Photographs that could not be compared',
 
+  'labUpload.title': 'Upload the laboratory report',
+  'labUpload.storedNotRead':
+    'Stored, never read. No value is extracted from this document and no grade comes out of it — the interpretation above works on the numbers you type, with the unit stated. It is filed here so the referral carries its source and a reviewer can check the typed values against the original.',
+  'labUpload.choose': 'Choose a PDF or photo',
+  'labUpload.service': 'Reporting laboratory (optional)',
+  'labUpload.servicePlaceholder': 'e.g. Central Laboratory',
+  'labUpload.serviceHint': 'The service, never a named person.',
+  'labUpload.ack':
+    'I have removed the patient’s name, date of birth and any other identifier from this document. A laboratory printout normally carries them across the top, and this record is pseudonymous.',
+  'labUpload.file': 'File the report',
+  'labUpload.filing': 'Filing…',
+  'labUpload.filed': 'Report filed against this case.',
+
   'result.triage': 'Triage',
   'result.confidence': 'Confidence',
   'result.nextStep': 'Recommended next step',
@@ -711,6 +724,19 @@ const ar: Dict = {
   'progress.over': 'خلال',
   'progress.days': 'يوماً',
   'progress.excluded': 'صور تعذّرت مقارنتها',
+
+  'labUpload.title': 'رفع تقرير المختبر',
+  'labUpload.storedNotRead':
+    'يُحفظ ولا يُقرأ. لا تُستخرج أي قيمة من هذا المستند ولا تنتج عنه أي درجة — التفسير أعلاه يعمل على الأرقام التي تكتبها مع وحدتها. يُحفظ هنا ليحمل الإحالة مصدرها وليتمكن المراجع من مطابقة القيم المكتوبة بالأصل.',
+  'labUpload.choose': 'اختر ملف PDF أو صورة',
+  'labUpload.service': 'المختبر المُصدِر (اختياري)',
+  'labUpload.servicePlaceholder': 'مثال: المختبر المركزي',
+  'labUpload.serviceHint': 'اسم الخدمة، لا اسم شخص.',
+  'labUpload.ack':
+    'أزلت اسم المريض وتاريخ ميلاده وأي معرِّف آخر من هذا المستند. تقرير المختبر يحملها عادةً في أعلاه، وهذا السجل مُرمَّز.',
+  'labUpload.file': 'حفظ التقرير',
+  'labUpload.filing': 'جارٍ الحفظ…',
+  'labUpload.filed': 'حُفظ التقرير في هذه الحالة.',
 
   'result.triage': 'الفرز',
   'result.confidence': 'مستوى الثقة',

@@ -29,7 +29,8 @@ from ..storage import build_key, get_storage
 
 router = APIRouter(prefix="/cases", tags=["investigations"])
 
-CATEGORIES = {"radiology", "endoscopy", "histopathology", "physiology", "other"}
+CATEGORIES = {"radiology", "endoscopy", "histopathology", "physiology",
+              "laboratory", "other"}
 MODALITIES = {"x-ray", "ultrasound", "ct", "mri", "nuclear", "other"}
 
 # PDF and flat images only. DICOM is refused on purpose -- see below.

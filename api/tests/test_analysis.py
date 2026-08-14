@@ -351,12 +351,18 @@ async def test_a_dark_area_is_never_called_necrotic(client, auth, ref_factory):
 
 # --- wrong subject ------------------------------------------------------------
 
-def test_the_foot_module_refuses_input_it_cannot_interpret():
-    """Colour statistics can be computed from anything. Before this gate the
-    eye module scored the warm tone of a photograph of a FOOT as scleral
-    yellowing and answered "urgent" at 0.85 confidence. That module is gone,
-    but the failure it proved is not: a confident answer from an
-    uninterpretable input is the worst output this platform can produce.
+def test_a_non_skin_photograph_is_flagged_rather_than_refused():
+    """This WAS a hard refusal, and the refusal has been withdrawn on purpose.
+
+    It existed because the eye module scored the warm tone of a photograph of a
+    FOOT as scleral yellowing and answered "urgent" at 0.85 confidence. There
+    is no eye module now, and — the decisive part — the image no longer routes
+    anything: routing comes from the examination and the answers. A meaningless
+    measurement is now visible nonsense rather than a clinical decision.
+
+    Meanwhile the refusal had a measured cost: light skin under a fluorescent
+    tube reads as "not skin" and was rejected outright. Clinics have
+    fluorescent tubes.
     """
     import cv2
     import numpy as np
@@ -373,9 +379,14 @@ def test_the_foot_module_refuses_input_it_cannot_interpret():
 
     out = execute(AnalysisJob(image_bytes=buf.tobytes(), module="foot",
                               render_overlay=False))
-    assert out.subject_error is not None, "a non-skin scene was analysed"
-    assert out.result is None
-    assert out.subject_error.hint
+    assert out.subject_error is None, "a plausible capture was refused"
+    assert out.result is not None
+
+    check = out.result.features["subject_check"]
+    assert check["looks_like_skin"] is False
+    assert "meaningless" in check["warning"]
+    # And the warning leads the rationale, so it cannot be scrolled past.
+    assert out.result.triage.rationale[0] == check["warning"]
 
 
 @pytest.mark.parametrize("sample", ANALYSABLE, ids=[s.name for s in ANALYSABLE])
@@ -393,10 +404,11 @@ def test_the_right_subject_is_never_refused(sample):
 
 
 
-async def test_wrong_subject_is_a_distinct_api_error(client, auth, ref_factory):
-    """Not a quality failure — the photograph may be perfectly sharp. It is
-    simply not a photograph of skin, and saying so is different from saying
-    "re-take it because it is blurred"."""
+async def test_a_non_skin_photograph_is_analysed_but_flagged(client, auth,
+                                                             ref_factory):
+    """Accepted and recorded, with the doubt stated in the result rather than
+    withheld as an error. The image routes nothing, so a wrong number here is
+    visible rather than decisive."""
     import cv2
     import numpy as np
 
@@ -414,14 +426,17 @@ async def test_wrong_subject_is_a_distinct_api_error(client, auth, ref_factory):
         f"{API}/cases/{case_id}/analyze", headers=auth,
         files={"file": ("f.png", buf.tobytes(), "image/png")},
     )
-    assert resp.status_code == 422, resp.text
-    error = resp.json()["error"]
-    assert error["code"] == "subject_not_recognised"
-    assert error["hint"].strip()
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    check = body["features"]["subject_check"]
+    assert check["looks_like_skin"] is False
+    assert check["advice"].strip()
+    assert body["triage"]["rationale"][0] == check["warning"]
 
-    # Nothing analysed, nothing stored.
+    # Stored, and the case is still NOT routed by it.
     case = (await client.get(f"{API}/cases/{case_id}", headers=auth)).json()
-    assert case["latest_analysis"] is None
+    assert case["latest_analysis"] is not None
+    assert case["routing"]["grade"] == "not_assessed"
     assert case["history"] == []
 
 
@@ -702,12 +717,18 @@ async def test_a_dark_area_is_never_called_necrotic(client, auth, ref_factory):
 
 # --- wrong subject ------------------------------------------------------------
 
-def test_the_foot_module_refuses_input_it_cannot_interpret():
-    """Colour statistics can be computed from anything. Before this gate the
-    eye module scored the warm tone of a photograph of a FOOT as scleral
-    yellowing and answered "urgent" at 0.85 confidence. That module is gone,
-    but the failure it proved is not: a confident answer from an
-    uninterpretable input is the worst output this platform can produce.
+def test_a_non_skin_photograph_is_flagged_rather_than_refused():
+    """This WAS a hard refusal, and the refusal has been withdrawn on purpose.
+
+    It existed because the eye module scored the warm tone of a photograph of a
+    FOOT as scleral yellowing and answered "urgent" at 0.85 confidence. There
+    is no eye module now, and — the decisive part — the image no longer routes
+    anything: routing comes from the examination and the answers. A meaningless
+    measurement is now visible nonsense rather than a clinical decision.
+
+    Meanwhile the refusal had a measured cost: light skin under a fluorescent
+    tube reads as "not skin" and was rejected outright. Clinics have
+    fluorescent tubes.
     """
     import cv2
     import numpy as np
@@ -724,9 +745,14 @@ def test_the_foot_module_refuses_input_it_cannot_interpret():
 
     out = execute(AnalysisJob(image_bytes=buf.tobytes(), module="foot",
                               render_overlay=False))
-    assert out.subject_error is not None, "a non-skin scene was analysed"
-    assert out.result is None
-    assert out.subject_error.hint
+    assert out.subject_error is None, "a plausible capture was refused"
+    assert out.result is not None
+
+    check = out.result.features["subject_check"]
+    assert check["looks_like_skin"] is False
+    assert "meaningless" in check["warning"]
+    # And the warning leads the rationale, so it cannot be scrolled past.
+    assert out.result.triage.rationale[0] == check["warning"]
 
 
 @pytest.mark.parametrize("sample", ANALYSABLE, ids=[s.name for s in ANALYSABLE])

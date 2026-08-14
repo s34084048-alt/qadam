@@ -115,12 +115,15 @@ class ClassicalCVBackend:
             subject = mask > 0
 
         mask = self._widen_if_the_lesion_became_the_subject(image_bgr, mask, module)
-        self._require_expected_subject(image_bgr, mask, module)
+        unexpected = self._note_if_subject_is_unexpected(image_bgr, mask)
 
         fn = {
             "foot": self._foot,
         }[module]
         result = fn(image_bgr, mask, quality)
+        if unexpected:
+            result.features["subject_check"] = unexpected
+            result.triage.rationale.insert(0, unexpected["warning"])
         result.model_version = f"{self.name}-{self.version}"
         result.backend = self.backend_id
         return result
@@ -168,25 +171,47 @@ class ClassicalCVBackend:
 
         return np.full(bgr.shape[:2], 255, dtype=np.uint8)
 
-    def _require_expected_subject(self, bgr, mask, module: str) -> None:
-        """Refuse an image that does not contain the module's subject.
+    def _note_if_subject_is_unexpected(self, bgr, mask) -> dict | None:
+        """Flag an image that does not look like skin. No longer REFUSE it.
 
-        Every module here measures colour statistics, and colour statistics can
-        be computed from anything. Without this gate the eye module read the
-        warm tone of a photograph of a foot as scleral yellowing and returned
-        "urgent" at 0.85 confidence.
+        This was a hard rejection, and it existed for a reason that has since
+        been removed twice over.
+
+        It was built because the EYE module read the warm tone of a photograph
+        of a foot as scleral yellowing and answered "urgent" at 0.85
+        confidence. There is no eye module now — there is one image module, and
+        the user selected it deliberately before pointing the camera.
+
+        More importantly, THE IMAGE NO LONGER ROUTES ANYTHING. That grade was
+        dangerous because it was the decision; routing now comes from the
+        examination and the answers (app/routing.py). A meaningless measurement
+        of a photograph of a desk is now visible nonsense rather than a
+        clinical decision.
+
+        Meanwhile the cost was real and measured: light skin under a
+        fluorescent tube measures a* and b* NEGATIVE and was rejected outright.
+        Clinics have fluorescent tubes. Refusing to analyse a real foot because
+        of the lamp above it is a worse failure than measuring a desk.
         """
         _L, a, b = cv_utils.lab_planes(bgr)
         skin, stats = cv_utils.looks_like_skin(a, b, mask)
-        if not skin:
-            raise SubjectMismatch(
-                module,
-                "The photographed subject does not look like skin "
-                f"(median a* {stats.get('a_median')}, b* {stats.get('b_median')}; "
-                "skin of every tone sits in the warm range).",
-                "Fill the frame with the foot or the area of skin being "
-                "assessed, on a plain background, in even light.",
-            )
+        if skin:
+            return None
+        return {
+            "looks_like_skin": False,
+            "measured": stats,
+            "warning": (
+                "The photographed area does not read as skin — its colour sits "
+                "outside the warm range skin occupies in every tone. Cool or "
+                "fluorescent light can cause this on a real foot. If this is "
+                "not a photograph of skin, every measurement below is "
+                "meaningless."
+            ),
+            "advice": (
+                "Re-capture in even, indirect light, filling the frame with "
+                "the area being assessed on a plain background."
+            ),
+        }
 
     def _skin_reference(self, L, a, b, subject, t) -> tuple[float, float, float, dict]:
         """The patient's own NORMAL skin, used as the reference every threshold
