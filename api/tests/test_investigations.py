@@ -19,7 +19,7 @@ from tests.conftest import API, make_case, make_patient
 PDF = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
 
 
-async def _case(client, auth, ref_factory, module: str = "injury") -> str:
+async def _case(client, auth, ref_factory, module: str = "foot") -> str:
     ref = ref_factory("inv")
     await make_patient(client, auth, ref)
     return await make_case(client, auth, ref, module)
@@ -204,7 +204,7 @@ async def test_attaching_a_result_does_not_create_an_analysis(
 async def test_erasure_removes_filed_documents(client, auth, ref_factory):
     ref = ref_factory("inv-erase")
     await make_patient(client, auth, ref)
-    case_id = await make_case(client, auth, ref, "injury")
+    case_id = await make_case(client, auth, ref, "foot")
     created = await client.post(
         f"{API}/cases/{case_id}/investigations", headers=auth,
         data={"category": "radiology", "identifiers_removed": "true"},

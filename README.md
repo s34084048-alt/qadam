@@ -1,14 +1,20 @@
-# QADAM — visual triage platform
+# QADAM — diabetic foot screening and triage
 
 > **NOT A MEDICAL DEVICE — not for clinical use.**
 > Research/decision-support tool — not a diagnosis. Not a substitute for
 > clinical assessment. A qualified clinician must confirm every clinically
 > significant output.
 
-A trained health worker picks a module, captures or uploads a photo, and QADAM
-returns an **image-quality check → a graded triage flag → an honest
-recommended next investigation → a clinician summary**. Every case is stored,
-exportable and auditable.
+**One indication: the diabetic foot.** A trained health worker records a
+structured foot examination, captures or uploads a photo, and QADAM returns an
+**image-quality check → a graded triage flag → an honest recommended next
+investigation → a clinician summary**, with IWGDF risk stratification setting
+the surveillance interval. Laboratory panels attach to the same case. Every
+case is stored, exportable and auditable.
+
+Skin, eye, face and injury modules were removed. Each widened the intended-use
+statement — the first thing a regulator asks — multiplied the validation
+burden, and had no buyer of its own. They are in the git history.
 
 ---
 
@@ -25,25 +31,14 @@ It **never** claims to diagnose internal pathology from a photograph — no
 fracture, dislocation, tendon rupture, muscle tear, internal bleeding, or any
 sub-surface condition. A visible-light camera does not capture that information.
 
-* **Injury is routing-only.** It detects external red flags (bruising,
-  asymmetric swelling, visible deformity) and tells you which imaging or
-  clinician to go to. It states that it cannot confirm or exclude internal
-  injury, and a **no-flag** result states in capitals that it **does not exclude
-  internal injury**.
-* **Eye is anterior surface only.** Retinal disease — including diabetic
-  retinopathy — is not assessable without a fundus camera and is out of scope.
-  Pupil **size** is measured by scaling against the iris (taken as 11.7 mm);
-  pupil **reaction to light** is not, and cannot be, from a still image —
-  reaction matters more than size, and so does whether unequal pupils diverge
-  in bright or in dim light. Both need a clinician with a torch.
-* **Skin is not dermoscopy.** Only dermoscopy and histopathology can
-  characterise a lesion.
-* **Foot** cannot see depth, bone, infection, perfusion or neuropathy.
-* **Face is relative colour only, and is not a pulse oximeter.** Camera white
-  balance shifts apparent colour more than illness does, so only differences
-  BETWEEN facial regions are used, with the sclera as an in-frame white
-  reference. Confidence is capped at 0.55 — below every other module. A normal
-  photograph does not exclude hypoxaemia, anaemia or stroke.
+* **Foot cannot see depth, bone, infection, perfusion or neuropathy.** Those
+  are the findings that decide a diabetic foot, and every one of them comes
+  from the clinician — pulses, a 10 g monofilament, probe-to-bone, a
+  thermometer. `/cases/{id}/follow-up` is where they come back in, and they
+  can RAISE the routing grade but never lower it.
+* **Risk stratification is not derived from any image.** IWGDF category comes
+  from the examination, and it refuses to stratify at all when a required test
+  was not performed — an untested foot is not a negative one.
 * **No treatment or medication is ever recommended.** The only output is a
   suggested next investigation.
 * **The lab module takes typed numbers, never an image.** Units are required
@@ -252,7 +247,7 @@ and discarding is an explicit, confirmed action.
 cd api && .venv/Scripts/python -m pytest -q
 ```
 
-328 tests: every module's expected grade and routing on its synthetic sample,
+267 tests: every module's expected grade and routing on its synthetic sample,
 quality-gate rejection, resolution invariance, auth, consent, audit, erasure,
 organisational isolation, colour calibration (and every way it must refuse),
 case deletion, the clinical layer (no single-item differentials, no treatment
@@ -337,10 +332,10 @@ api/
       runner.py          InlineRunner | QueueRunner seam
       backends/
         base.py          ModelBackend Protocol
-        classical.py     OpenCV placeholder, all four modules
+        classical.py     OpenCV placeholder, foot module
         onnx.py          ONNX Runtime slot
   alembic/               migrations (incl. Postgres append-only audit trigger)
-  tests/                 328 tests
+  tests/                 267 tests
 web/src/                 React app, i18n EN/AR with RTL
 ```
 

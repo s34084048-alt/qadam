@@ -163,9 +163,9 @@ def assert_no_treatment_instruction(text: str, context: str) -> None:
 
 
 @pytest.mark.parametrize("sample", [s for s in ANALYSABLE
-                                    if s.module in ("foot", "skin", "face", "eye")],
+                                    if s.module == "foot"],
                          ids=[s.name for s in ANALYSABLE
-                              if s.module in ("foot", "skin", "face", "eye")])
+                              if s.module == "foot"])
 async def test_clinical_layer_gives_differentials_not_diagnoses(
     client, auth, ref_factory, sample
 ):
@@ -190,9 +190,9 @@ async def test_clinical_layer_gives_differentials_not_diagnoses(
 
 
 @pytest.mark.parametrize("sample", [s for s in ANALYSABLE
-                                    if s.module in ("foot", "skin", "face", "eye")],
+                                    if s.module == "foot"],
                          ids=[s.name for s in ANALYSABLE
-                              if s.module in ("foot", "skin", "face", "eye")])
+                              if s.module == "foot"])
 async def test_immediate_actions_are_protective_never_treatment(
     client, auth, ref_factory, sample
 ):
@@ -224,22 +224,6 @@ async def test_severity_index_is_labelled_as_surface_only(
     assert len(scales["SINBAD"]["requires_clinical_examination"]) >= 4
 
 
-async def test_skin_abcde_marks_what_it_cannot_measure(client, auth, ref_factory):
-    sample = next(s for s in SAMPLES if s.name == "skin_urgent")
-    _case_id, body = await _analyze(client, auth, ref_factory, sample)
-    abcde = body["clinical"]["scales"]["ABCDE"]
-
-    # Diameter needs a size reference; evolution needs history. Reporting
-    # either from one image would be invention.
-    assert abcde["D_diameter"]["measured"] is None
-    assert abcde["E_evolution"]["measured"] is None
-    assert "size reference" in abcde["D_diameter"]["basis"].lower()
-    assert "single image" in abcde["E_evolution"]["basis"].lower()
-    assert isinstance(abcde["A_asymmetry"]["measured"], (int, float))
-
-    not_assessable = " ".join(body["clinical"]["not_assessable"]).lower()
-    assert "histopathology" in not_assessable
-    assert "dermatoscope" in not_assessable
 
 
 async def test_emergency_reference_is_static_and_image_independent(client, auth):
@@ -302,54 +286,12 @@ async def test_emergency_reference_is_static_and_image_independent(client, auth)
                 assert loader not in svg, f"diagram {name} pulls in {loader!r}"
 
 
-async def test_injury_no_flag_states_it_does_not_exclude_internal_injury(
-    client, auth, ref_factory
-):
-    sample = next(s for s in SAMPLES if s.name == "injury_clean")
-    _case_id, body = await _analyze(client, auth, ref_factory, sample)
-
-    assert body["triage"]["grade"] == "no_flag"
-    caveat = body["safety"]["no_flag_caveat"]
-    assert "DOES NOT EXCLUDE INTERNAL INJURY" in caveat.upper()
-
-    joined = " ".join(body["triage"]["rationale"]).upper()
-    assert "DOES NOT EXCLUDE INTERNAL INJURY" in joined
-
-    nxt = body["triage"]["next_investigation"].upper()
-    assert "DOES NOT EXCLUDE INTERNAL INJURY" in nxt
-    assert "IMAGING" in nxt
 
 
-@pytest.mark.parametrize("grade", ["no_flag", "monitor", "review", "urgent"])
-async def test_injury_routing_never_diagnoses(grade):
-    spec = MODULES["injury"]["routing"][grade]
-    _assert_no_forbidden_claims(spec["next_investigation"], f"injury/{grade}")
-    text = spec["next_investigation"].lower()
-    # Every injury route points at a real investigation or a real clinician.
-    assert any(word in text for word in
-               ("x-ray", "ultrasound", "imaging", "clinical assessment",
-                "clinician"))
 
 
-async def test_injury_module_is_declared_routing_only(client):
-    body = (await client.get(f"{API}/modules")).json()
-    injury = next(m for m in body["modules"] if m["id"] == "injury")
-    assert injury["routing_only"] is True
-    text = " ".join(injury["limitations"]).lower()
-    assert "cannot confirm or exclude" in text
-    for term in ("fracture", "dislocation", "internal bleeding"):
-        assert term in text
 
 
-async def test_eye_module_excludes_the_retina(client, auth, ref_factory):
-    sample = next(s for s in SAMPLES if s.name == "eye_urgent")
-    _case_id, body = await _analyze(client, auth, ref_factory, sample)
-    rationale = " ".join(body["triage"]["rationale"]).lower()
-    assert "fundus camera" in rationale
-    assert "retina" in rationale
-    assert body["features"]["retina_assessed"] is False
-    limitations = " ".join(body["safety"]["module_limitations"]).lower()
-    assert "diabetic retinopathy" in limitations
 
 
 async def test_confidence_is_never_overstated(client, auth, ref_factory):

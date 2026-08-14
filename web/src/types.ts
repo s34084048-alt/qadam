@@ -1,5 +1,5 @@
 export type Grade = 'no_flag' | 'monitor' | 'review' | 'urgent'
-export type ModuleId = 'foot' | 'skin' | 'eye' | 'injury' | 'face' | 'lab'
+export type ModuleId = 'foot' | 'lab'
 
 export interface SafetyBlock {
   disclaimer: string

@@ -33,17 +33,16 @@ async def test_module_catalogue_carries_limitations(client):
 
     by_id = {m["id"]: m for m in body["modules"]}
 
-    injury = by_id["injury"]
-    assert injury["routing_only"] is True
-    joined = " ".join(injury["limitations"]).lower()
-    assert "cannot confirm or exclude" in joined
-    assert "fracture" in joined
-    assert "does not exclude internal injury" in injury["no_flag_caveat"].lower()
+    # One indication. Skin, eye, face and injury were removed: each widened the
+    # intended-use statement, multiplied the validation burden, and had no
+    # buyer of its own.
+    assert ids == {"foot", "lab"}
 
-    eye = by_id["eye"]
-    eye_text = " ".join(eye["limitations"]).lower()
-    assert "fundus camera" in eye_text
-    assert "retinal" in eye_text
+    foot = by_id["foot"]
+    foot_text = " ".join(foot["limitations"]).lower()
+    assert "cannot be assessed from a photograph" in foot_text
+    assert "perfusion" in foot_text and "neuropathy" in foot_text
+    assert "does not exclude" in foot["no_flag_caveat"].lower()
 
     # Every grade in every module routes somewhere real.
     for module in body["modules"]:

@@ -20,7 +20,7 @@ from tests.conftest import API, make_case, make_patient
 def test_classical_backend_satisfies_the_protocol():
     backend = ClassicalCVBackend()
     assert isinstance(backend, ModelBackend)
-    for module in ("foot", "skin", "eye", "injury"):
+    for module in ("foot",):
         assert backend.supports(module)
     assert not backend.supports("chest-xray")
 
@@ -63,13 +63,13 @@ async def test_activating_a_model_is_admin_only_and_audited(
 ):
     async with SessionLocal() as session:
         session.add(ModelRegistry(
-            module="skin", name="skin-seg", version="1.0.0", backend="onnx",
-            active=False, artifact_uri="/nonexistent/skin.onnx",
+            module="foot", name="foot-seg", version="1.0.0", backend="onnx",
+            active=False, artifact_uri="/nonexistent/foot.onnx",
             metrics_json={"validated": False},
         ))
         await session.commit()
         model = (await session.execute(
-            select(ModelRegistry).where(ModelRegistry.name == "skin-seg")
+            select(ModelRegistry).where(ModelRegistry.name == "foot-seg")
         )).scalar_one()
 
     forbidden = await client.post(
@@ -87,10 +87,10 @@ async def test_activating_a_model_is_admin_only_and_audited(
     # succeeds because the missing artifact degrades to the placeholder.
     ref = ref_factory("seam")
     await make_patient(client, auth, ref)
-    case_id = await make_case(client, auth, ref, "skin")
+    case_id = await make_case(client, auth, ref, "foot")
     resp = await client.post(
         f"{API}/cases/{case_id}/analyze", headers=auth,
-        files={"file": ("s.png", png_bytes("skin_urgent"), "image/png")},
+        files={"file": ("s.png", png_bytes("foot_urgent"), "image/png")},
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -103,7 +103,7 @@ async def test_activating_a_model_is_admin_only_and_audited(
     # Restore the classical row as the active model for later tests.
     async with SessionLocal() as session:
         rows = (await session.execute(
-            select(ModelRegistry).where(ModelRegistry.module == "skin")
+            select(ModelRegistry).where(ModelRegistry.module == "foot")
         )).scalars().all()
         for row in rows:
             row.active = row.backend == "classical_cv"

@@ -23,10 +23,10 @@ async def _audit_rows(entity_id: str) -> list[AuditLog]:
 async def test_every_mutating_action_is_audited(client, auth, ref_factory):
     ref = ref_factory("audit")
     await make_patient(client, auth, ref)
-    case_id = await make_case(client, auth, ref, "skin")
+    case_id = await make_case(client, auth, ref, "foot")
     await client.post(
         f"{API}/cases/{case_id}/analyze", headers=auth,
-        files={"file": ("s.png", png_bytes("skin_urgent"), "image/png")},
+        files={"file": ("s.png", png_bytes("foot_urgent"), "image/png")},
     )
     await client.get(f"{API}/cases/{case_id}", headers=auth)
     await client.get(f"{API}/cases/{case_id}/summary.pdf", headers=auth)
@@ -83,10 +83,10 @@ async def test_admin_audit_endpoint_lists_rows(client, admin_auth):
 async def test_patient_export_returns_everything_held(client, auth, ref_factory):
     ref = ref_factory("export")
     await make_patient(client, auth, ref, skin_tone=7)
-    case_id = await make_case(client, auth, ref, "eye")
+    case_id = await make_case(client, auth, ref, "foot")
     await client.post(
         f"{API}/cases/{case_id}/analyze", headers=auth,
-        files={"file": ("e.png", png_bytes("eye_urgent"), "image/png")},
+        files={"file": ("f.png", png_bytes("foot_urgent"), "image/png")},
     )
 
     body = (await client.get(f"{API}/patients/{ref}/export", headers=auth)).json()

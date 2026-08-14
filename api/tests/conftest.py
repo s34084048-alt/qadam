@@ -59,7 +59,7 @@ async def _schema():
             User(organisation_id=second.id, email=OTHER_ADMIN[0],
                  password_hash=hash_password(OTHER_ADMIN[1]), role="admin"),
         ])
-        for module in ("foot", "skin", "eye", "injury"):
+        for module in ("foot",):
             session.add(ModelRegistry(
                 module=module, name="classical-cv", version="0.1.0",
                 backend="classical_cv", active=True, metrics_json={"validated": False},

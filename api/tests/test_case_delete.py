@@ -218,7 +218,7 @@ async def test_the_patient_record_is_not_deleted(client, auth, ref_factory):
     """Deleting a case is not the same request as erasing a patient, and other
     cases may still reference them."""
     ref, case_id = await _full_case(client, auth, ref_factory)
-    other_case = await make_case(client, auth, ref, "skin")
+    other_case = await make_case(client, auth, ref, "lab")
 
     await client.delete(f"{API}/cases/{case_id}?confirm=true", headers=auth)
 

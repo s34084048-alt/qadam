@@ -7,7 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Grade = Literal["no_flag", "monitor", "review", "urgent"]
-ModuleId = Literal["foot", "skin", "eye", "injury", "face", "lab"]
+ModuleId = Literal["foot", "lab"]
 
 
 # --- auth --------------------------------------------------------------------
