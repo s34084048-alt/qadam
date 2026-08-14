@@ -49,6 +49,41 @@ class AnalysisOutput:
         return self.result is None
 
 
+# Which measured percentages describe an AREA on the subject, and so can be
+# converted to cm² once a size reference exists.
+_AREA_FEATURES = ("dark_area_pct", "breakdown_pct", "erythema_pct")
+
+
+def _measurements(result, cal) -> dict:
+    """Percentages as measured, plus cm² when the frame carried a size
+    reference. Serial comparison is only valid on the cm² figures."""
+    subject_px = float(result.features.get("subject_area_px", 0.0))
+    out: dict = {
+        "scale": cal.scale.to_json(),
+        "areas": {},
+        "comparable_between_visits": bool(cal.scale.available),
+        "caveat": (
+            "Areas in cm² are derived from a card of known size in the frame "
+            "and assume it lies flat in the same plane as the wound. They are "
+            "a measurement of the visible surface, not of depth or volume."
+            if cal.scale.available else
+            "No size reference in this image, so areas are a percentage of the "
+            "imaged region only. Do NOT compare them with another visit — "
+            "moving the camera changes them."
+        ),
+    }
+    for name in _AREA_FEATURES:
+        pct = result.features.get(name)
+        if pct is None:
+            continue
+        entry: dict = {"percent_of_region": pct}
+        if cal.scale.available and subject_px > 0:
+            entry["cm2"] = round(
+                cal.scale.area_cm2(subject_px * float(pct) / 100.0) or 0.0, 3)
+        out["areas"][name] = entry
+    return out
+
+
 def execute(job: AnalysisJob) -> AnalysisOutput:
     """Quality gate, then module analysis, then overlay. CPU-bound."""
     image = cv_utils.decode_image(job.image_bytes)
@@ -117,6 +152,12 @@ def execute(job: AnalysisJob) -> AnalysisOutput:
     # this grade was derived from were corrected is part of how the grade was
     # reached, and a later reader needs to see it without digging.
     result.features["colour_calibration"] = cal.to_json()
+
+    # Real-world size, when the card gave one. Percentages are a fraction of
+    # the imaged region and change with camera distance, so they cannot be
+    # compared between visits; cm² can. Both are reported, and the absence of
+    # cm² is stated rather than left to be inferred.
+    result.features["measurement"] = _measurements(result, cal)
     if cal.applied:
         result.triage.rationale.append(
             "Colours were corrected using a neutral reference card in the "

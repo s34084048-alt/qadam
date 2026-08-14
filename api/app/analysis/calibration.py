@@ -32,7 +32,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from . import cv_utils
+from . import cv_utils, scale as scale_mod
 
 NOT_PRESENT = (
     "No colour reference card was detected in this image. Colours are "
@@ -54,6 +54,10 @@ class Calibration:
     gains_bgr: list[float] = field(default_factory=list)
     illuminant_shift: float = 0.0
     card: dict[str, Any] = field(default_factory=dict)
+    # The SAME card also fixes real-world size. Colour makes two visits
+    # comparable in hue; scale makes them comparable in area, which is the
+    # measurement wound care actually tracks.
+    scale: "scale_mod.Scale" = field(default_factory=lambda: scale_mod.Scale())
 
     def to_json(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -78,6 +82,7 @@ class Calibration:
             out["illuminant_shift_pct"] = round(self.illuminant_shift * 100, 1)
         if self.card:
             out["card"] = self.card
+        out["scale"] = self.scale.to_json()
         return out
 
 
@@ -100,6 +105,8 @@ def calibrate(
         "w": card["bbox"][2], "h": card["bbox"][3],
     }
 
+    measured = scale_mod.from_card(card)
+
     gains, refusal = cv_utils.white_balance_gain(card)
     if gains is None:
         # Still exclude it from the subject: an unusable card is a piece of
@@ -107,7 +114,7 @@ def calibrate(
         # whole gate exists to avoid.
         return (bgr, _exclude_card(subject_mask, card_mask),
                 Calibration(detected=True, applied=False, reason=refusal,
-                            card=descriptor))
+                            card=descriptor, scale=measured))
 
     corrected = cv_utils.apply_gain(bgr, gains)
     shift = float(gains.max() / max(float(gains.min()), 1e-6)) - 1.0
@@ -120,6 +127,7 @@ def calibrate(
             gains_bgr=[float(g) for g in gains],
             illuminant_shift=shift,
             card=descriptor,
+            scale=measured,
         ),
     )
 

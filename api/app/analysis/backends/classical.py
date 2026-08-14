@@ -383,6 +383,10 @@ class ClassicalCVBackend:
                 "breakdown_pct": round(brk_pct, 3),
                 "dark_area_pct": round(dark_pct, 3),
                 "subject_L_median": round(L_med, 2),
+                # Needed to turn a percentage into cm² once a size reference
+                # exists. Without it the percentages cannot be compared
+                # between visits at all.
+                "subject_area_px": round(subject_area, 1),
                 # What the thresholds were measured against, and whether the
                 # lesion was large enough that the reference had to be
                 # recomputed from the remaining skin. A later reader needs this
