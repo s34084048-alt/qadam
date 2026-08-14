@@ -3,12 +3,15 @@
 The clinical layer has always printed "check the pulses, test with a
 monofilament, ask how long it has been there". Those prompts went nowhere. This
 router lets the answers come back in, records them against the analysis they
-refine, and re-runs the routing decision with them included.
+refine, and grades them.
 
-Answers escalate; they never de-escalate. The reasoning is in
-analysis/followup.py -- in short, the image grade comes from a measurement and
-the answers are unverified self-report, so allowing reassurance to overwrite a
-measured flag would create a one-click path to dismissing it.
+The photograph is NOT combined with them. It used to be — the outcome was
+max(image grade, answer grade) — and that made a hand-tuned colour threshold a
+term in a clinical decision. The ceiling on those thresholds was measured
+directly in this project: catching a wound that fills the frame brought back a
+false alarm on a healthy toe, and avoiding that brought back the silent miss.
+The case is routed on these answers and the IWGDF category instead, both of
+which are findings a clinician obtained. See app/routing.py.
 """
 
 from __future__ import annotations
@@ -48,8 +51,9 @@ async def module_questions(module: str, user: CurrentUser) -> dict[str, Any]:
         "module": module,
         "questions": [q.to_json() for q in questions],
         "combination_rule": (
-            "The combined grade is the more urgent of the image grade and the "
-            "answer grade. Answers raise urgency and never lower it."
+            "This grade comes from the answers alone. The case is routed on "
+            "the more urgent of these answers and the IWGDF risk category. "
+            "The photograph is not an input to either."
         ),
         "answers_are_not_measurements": (
             "Everything recorded here is entered by a clinician and is stored "
@@ -68,7 +72,7 @@ async def _latest_analysis(session, case: Case) -> Analysis | None:
 
 
 def _out(row: CaseFollowUp) -> FollowUpOut:
-    spec = routing_for(row.module, row.combined_grade)
+    spec = routing_for(row.module, row.answer_grade)
     return FollowUpOut(
         id=row.id,
         case_id=row.case_id,
@@ -76,16 +80,15 @@ def _out(row: CaseFollowUp) -> FollowUpOut:
         module=row.module,
         image_grade=row.image_grade,
         answer_grade=row.answer_grade,
-        combined_grade=row.combined_grade,
-        combined_label=spec["label"],
-        combined_color=GRADE_STYLE[row.combined_grade]["color"],
-        escalated=row.escalated,
+        answer_label=spec["label"],
+        answer_color=GRADE_STYLE[row.answer_grade]["color"],
+        triggered=row.escalated,
         answers=row.answers_json or {},
         outcome=row.outcome_json or {},
         note=row.note,
         created_at=row.created_at,
         created_by=row.created_by,
-        safety=safety_block(row.module, row.combined_grade),
+        safety=safety_block(row.module, row.answer_grade),
     )
 
 
@@ -121,14 +124,15 @@ async def add_follow_up(
     else:
         analysis = await _latest_analysis(session, case)
 
-    # Answers can be recorded before any image is taken. With no analysis the
-    # image contributes nothing, so the routing rests entirely on the answers.
-    image_grade = (
-        Grade(analysis.triage_grade) if analysis is not None else Grade.NO_FLAG
+    # Recorded only. What the image observed is kept beside the answers so a
+    # later reader can see it, but it is not an input to the grade — see
+    # app/routing.py.
+    observed = (
+        analysis.triage_grade if analysis is not None else str(Grade.NO_FLAG)
     )
 
     try:
-        outcome = followup.evaluate(case.module, image_grade, body.answers)
+        outcome = followup.evaluate(case.module, body.answers)
     except followup.UnknownFollowUpField as exc:
         raise ApiError(
             400, "unknown_follow_up_field",
@@ -153,10 +157,11 @@ async def add_follow_up(
         case_id=case.id,
         analysis_id=analysis.id if analysis is not None else None,
         module=case.module,
-        image_grade=str(outcome.image_grade),
+        image_grade=observed,
         answer_grade=str(outcome.answer_grade),
-        combined_grade=str(outcome.combined_grade),
-        escalated=outcome.escalated,
+        # Kept equal to answer_grade so historical rows stay readable.
+        combined_grade=str(outcome.answer_grade),
+        escalated=outcome.answer_grade.rank > 0,
         answers_json=outcome.answered,
         outcome_json=outcome.to_json(),
         note=note,
@@ -174,9 +179,9 @@ async def add_follow_up(
         meta={
             "case_id": str(case.id),
             "module": case.module,
-            "image_grade": row.image_grade,
-            "combined_grade": row.combined_grade,
-            "escalated": row.escalated,
+            "image_grade_observed": row.image_grade,
+            "answer_grade": row.answer_grade,
+            "triggered": row.escalated,
             "answered_count": len(outcome.answered),
             "has_note": note is not None,
         },

@@ -394,17 +394,16 @@ def build_case_pdf(
     if follow_ups:
         flow.append(Paragraph("Clinician follow-up", S_H))
         flow.append(Paragraph(
-            "<b>Entered by a clinician, not measured by QADAM.</b> Answers "
-            "raise the routing grade and never lower it: a measured image "
-            "flag is not withdrawn because a test was reported as normal.",
+            "<b>Entered by a clinician, not measured by QADAM.</b> The case "
+            "is routed on these answers and the IWGDF risk category. The "
+            "photograph is not an input to that decision — it is the record.",
             S_WARN))
         for entry in follow_ups:
             flow.append(Paragraph(
-                f"<b>{entry.get('created_at', '')}</b> — image "
-                f"{entry.get('image_grade', '?')}, answers "
-                f"{entry.get('answer_grade', '?')}, combined "
-                f"<b>{entry.get('combined_grade', '?')}</b>"
-                + (" (escalated)" if entry.get("escalated") else ""),
+                f"<b>{entry.get('created_at', '')}</b> — answers "
+                f"<b>{entry.get('answer_grade', '?')}</b>"
+                + (f" (image observed: {entry['image_grade']}, "
+                   "not used for routing)" if entry.get("image_grade") else ""),
                 S_SMALL))
             answers = entry.get("answers") or {}
             if answers:

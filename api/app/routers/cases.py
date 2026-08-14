@@ -17,6 +17,7 @@ from ..errors import ApiError, not_found
 from ..models import (Analysis, Case, CaseFollowUp, FootRiskAssessment, Image,
                       InvestigationResult, LabPanel, LabResult, Lesion,
                       ModelRegistry, Patient)
+from .. import routing
 from ..pdf import build_case_pdf
 from ..safety import safety_block
 from ..schemas import (
@@ -57,6 +58,30 @@ async def _lesions_of(session, analysis_id: uuid.UUID) -> list[Lesion]:
         .order_by(Lesion.area_pct.desc())
     )
     return list(result.scalars().all())
+
+
+async def _case_routing(session, case: Case):
+    """The case's decision. Built from the examination and the answers only."""
+    foot_row = (await session.execute(
+        select(FootRiskAssessment).where(FootRiskAssessment.case_id == case.id)
+        .order_by(FootRiskAssessment.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+    follow_row = (await session.execute(
+        select(CaseFollowUp).where(CaseFollowUp.case_id == case.id)
+        .order_by(CaseFollowUp.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+
+    return routing.decide(
+        foot_risk=({
+            "grade": foot_row.grade,
+            "category": foot_row.category,
+            "screening_interval": foot_row.screening_interval,
+        } if foot_row else None),
+        follow_up=({
+            "answer_grade": follow_row.answer_grade,
+            "triggers": (follow_row.outcome_json or {}).get("triggers", []),
+        } if follow_row else None),
+    )
 
 
 async def _active_registry(session, module: str) -> ModelRegistry | None:
@@ -166,6 +191,7 @@ async def create_case(
         status=case.status, body_site=case.body_site, note=case.note,
         created_at=case.created_at, created_by=case.created_by,
         latest_analysis=None, history=[],
+        routing=routing.decide().to_json(),
     )
 
 
@@ -400,6 +426,7 @@ async def get_case(
         created_at=case.created_at, created_by=case.created_by,
         latest_analysis=outs[0] if outs else None,
         history=outs[1:],
+        routing=(await _case_routing(session, case)).to_json(),
     )
 
 
@@ -768,8 +795,6 @@ async def case_summary_pdf(
                 "created_at": f.created_at.isoformat(timespec="minutes"),
                 "image_grade": f.image_grade,
                 "answer_grade": f.answer_grade,
-                "combined_grade": f.combined_grade,
-                "escalated": f.escalated,
                 "answers": f.answers_json or {},
                 "triggers": (f.outcome_json or {}).get("triggers", []),
                 "note": f.note,

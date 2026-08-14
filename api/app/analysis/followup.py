@@ -341,10 +341,7 @@ _RULES = {
 @dataclass(slots=True)
 class FollowUpOutcome:
     module: str
-    image_grade: Grade
     answer_grade: Grade
-    combined_grade: Grade
-    escalated: bool
     triggers: list[Trigger]
     answered: dict[str, Any]
     unanswered: list[str]
@@ -353,20 +350,17 @@ class FollowUpOutcome:
     def to_json(self) -> dict[str, Any]:
         return {
             "module": self.module,
-            "image_grade": str(self.image_grade),
             "answer_grade": str(self.answer_grade),
-            "combined_grade": str(self.combined_grade),
-            "escalated": self.escalated,
             "triggers": [t.to_json() for t in self.triggers],
             "answers": dict(self.answered),
             "unanswered": list(self.unanswered),
             "not_tested": list(self.not_tested),
             "rule": (
-                "The combined grade is the more urgent of the image grade and "
-                "the answer grade. Answers can raise urgency; they never lower "
-                "it. Reassuring answers are recorded and shown, but a "
-                "measured image flag is not withdrawn because a test was "
-                "reported as normal."
+                "This grade comes from the answers alone. The photograph is "
+                "not an input to it — see app/routing.py. The case is routed "
+                "on the more urgent of these answers and the IWGDF risk "
+                "category, both of which are findings a clinician obtained "
+                "rather than inferences from pixels."
             ),
             "status": (
                 "Clinician-entered findings, not measurements made by QADAM. "
@@ -418,8 +412,14 @@ def validate(module: str, answers: dict[str, Any]) -> dict[str, Any]:
     return clean
 
 
-def evaluate(module: str, image_grade: Grade,
-             answers: dict[str, Any]) -> FollowUpOutcome:
+def evaluate(module: str, answers: dict[str, Any]) -> FollowUpOutcome:
+    """Grade the ANSWERS. The image is deliberately not a parameter.
+
+    It used to be: the outcome was max(image grade, answer grade). That made a
+    hand-tuned colour threshold a term in a clinical decision, and this project
+    measured the ceiling on those thresholds directly. Routing now combines
+    these answers with the IWGDF category instead — see app/routing.py.
+    """
     clean = validate(module, answers)
     triggers = _RULES.get(module, lambda _a: [])(clean)
     triggers.sort(key=lambda t: -t.grade.rank)
@@ -429,15 +429,10 @@ def evaluate(module: str, image_grade: Grade,
         if trigger.grade.rank > answer_grade.rank:
             answer_grade = trigger.grade
 
-    combined = image_grade if image_grade.rank >= answer_grade.rank else answer_grade
-
     asked = _valid_ids(module)
     return FollowUpOutcome(
         module=module,
-        image_grade=image_grade,
         answer_grade=answer_grade,
-        combined_grade=combined,
-        escalated=combined.rank > image_grade.rank,
         triggers=triggers,
         answered=clean,
         unanswered=[qid for qid in asked if qid not in clean],

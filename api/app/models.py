@@ -257,9 +257,14 @@ class CaseFollowUp(Base):
     """Clinician answers to the questions the camera cannot answer.
 
     Stored against the analysis they refine, so the record shows what was known
-    at the time rather than a moving present-tense view. `combined_grade` is
-    always at least as urgent as `image_grade`: answers escalate, never
-    de-escalate. See analysis/followup.py for why that asymmetry is deliberate.
+    at the time rather than a moving present-tense view.
+
+    `answer_grade` is graded from the ANSWERS ALONE. The photograph is not an
+    input to it. `image_grade` is retained as a RECORD of what the image
+    observed at the time, so a later reader can see it, but it takes no part in
+    routing -- see app/routing.py. Rows written before that change still carry
+    the old combined value; `combined_grade` is now simply a copy of
+    `answer_grade` and is kept so historical rows stay readable.
 
     `note` is free text written by the clinician. It is displayed and exported
     verbatim and is never parsed, scored, or fed to any model.

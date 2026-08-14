@@ -149,6 +149,10 @@ class CaseOut(BaseModel):
     created_by: uuid.UUID
     latest_analysis: AnalysisOut | None = None
     history: list[AnalysisOut] = []
+    # THE decision for this case, from the examination and the answers. The
+    # photograph is not an input — see app/routing.py. `latest_analysis` is
+    # the record of what was photographed, not the routing.
+    routing: dict[str, Any] = {}
 
 
 class CaseListItem(BaseModel):
@@ -198,12 +202,12 @@ class FollowUpOut(BaseModel):
     case_id: uuid.UUID
     analysis_id: uuid.UUID | None
     module: ModuleId
+    # Recorded, never routed on. See app/routing.py.
     image_grade: Grade
     answer_grade: Grade
-    combined_grade: Grade
-    combined_label: str
-    combined_color: str
-    escalated: bool
+    answer_label: str
+    answer_color: str
+    triggered: bool
     answers: dict[str, Any]
     outcome: dict[str, Any]
     note: str | None

@@ -1,9 +1,14 @@
 """Clinician follow-up answers and the re-assessment they drive.
 
-The property under test is the ASYMMETRY. Answers may raise the routing grade
-and must never lower it. Everything else here exists to make sure that property
-cannot be reached around: unknown fields are rejected rather than dropped,
-out-of-vocabulary values are refused, and no rule ever emits a treatment.
+These answers are graded on their own. The photograph used to be combined with
+them — the outcome was max(image grade, answer grade) — and that made a
+hand-tuned colour threshold a term in a clinical decision. It is gone; routing
+now combines these answers with the IWGDF category in app/routing.py, and
+test_routing.py holds that property.
+
+What is left here is that the answers themselves are graded correctly, that
+unknown fields are rejected rather than dropped, that out-of-vocabulary values
+are refused, and that no rule ever emits a treatment.
 """
 
 from __future__ import annotations
@@ -37,107 +42,80 @@ async def _analysed_case(client, auth, ref_factory, sample: str,
     return case_id, resp.json()["triage"]["grade"]
 
 
-# --- the combination rule ----------------------------------------------------
+# --- grading the answers ------------------------------------------------------
 
-@pytest.mark.parametrize(
-    "image_grade,answers,expected",
-    [
-        # Answers escalate.
-        (Grade.NO_FLAG, {"probe_to_bone": "yes"}, Grade.URGENT),
-        (Grade.NO_FLAG, {"monofilament": "absent"}, Grade.REVIEW),
-        (Grade.MONITOR, {"systemic_signs": "yes"}, Grade.URGENT),
-        # Answers NEVER de-escalate, however reassuring they are.
-        (Grade.URGENT,
-         {"pedal_pulses": "both_palpable", "monofilament": "intact",
-          "probe_to_bone": "no", "systemic_signs": "no",
-          "spreading_erythema": "no", "crepitus_odour_bullae": "no",
-          "rest_pain": "no", "hot_swollen_no_wound": "no",
-          "duration_weeks": 1},
-         Grade.URGENT),
-        (Grade.REVIEW, {"pedal_pulses": "both_palpable"}, Grade.REVIEW),
-        # No answers at all leaves the image grade untouched.
-        (Grade.MONITOR, {}, Grade.MONITOR),
-    ],
-)
-def test_combined_grade_is_the_more_urgent_of_the_two(image_grade, answers,
-                                                      expected):
-    outcome = followup.evaluate("foot", image_grade, answers)
-    assert outcome.combined_grade is expected
+@pytest.mark.parametrize("answers,expected", [
+    ({"probe_to_bone": "yes"}, Grade.URGENT),
+    ({"systemic_signs": "yes"}, Grade.URGENT),
+    ({"crepitus_odour_bullae": "yes"}, Grade.URGENT),
+    ({"monofilament": "absent"}, Grade.REVIEW),
+    ({"duration_weeks": 8}, Grade.REVIEW),
+    # Reassuring answers grade as no flag. They do not "lower" anything,
+    # because there is nothing here for them to lower any more.
+    ({"pedal_pulses": "both_palpable", "monofilament": "intact",
+      "probe_to_bone": "no", "systemic_signs": "no"}, Grade.NO_FLAG),
+    ({}, Grade.NO_FLAG),
+])
+def test_answers_are_graded_on_their_own(answers, expected):
+    assert followup.evaluate("foot", answers).answer_grade is expected
 
 
-@pytest.mark.parametrize("module", sorted(followup.QUESTIONS))
-def test_no_answer_set_can_lower_a_grade(module):
-    """Exhaustive over every single-answer combination in every module.
+def test_the_image_is_not_a_parameter():
+    """Structural, not behavioural: there is no argument through which a
+    colour threshold could be reintroduced into this grade."""
+    import inspect
 
-    A rule added later that happens to return a grade below the image grade
-    would be caught here rather than in a clinic.
-    """
-    for question in followup.questions_for(module):
-        values = question.options or [0, 1, 5, 50, 99]
-        for value in values:
-            for image_grade in Grade:
-                outcome = followup.evaluate(
-                    module, image_grade, {question.id: value})
-                assert outcome.combined_grade.rank >= image_grade.rank, (
-                    f"{module}.{question.id}={value} lowered "
-                    f"{image_grade} to {outcome.combined_grade}"
-                )
+    assert set(inspect.signature(followup.evaluate).parameters) == {
+        "module", "answers"}
 
 
 def test_reassuring_answers_are_still_recorded():
-    """De-escalation is refused, but the finding is not thrown away."""
+    """Graded as no flag, but the finding itself is not thrown away."""
     outcome = followup.evaluate(
-        "foot", Grade.URGENT,
-        {"pedal_pulses": "both_palpable", "monofilament": "intact"},
-    )
-    assert outcome.combined_grade is Grade.URGENT
-    assert outcome.answered["pedal_pulses"] == "both_palpable"
+        "foot", {"pedal_pulses": "both_palpable", "monofilament": "intact"})
     assert outcome.answer_grade is Grade.NO_FLAG
-    assert outcome.escalated is False
+    assert outcome.answered["pedal_pulses"] == "both_palpable"
+    assert outcome.triggers == []
 
 
 def test_not_tested_is_recorded_as_such_not_as_negative():
     outcome = followup.evaluate(
-        "foot", Grade.NO_FLAG,
-        {"monofilament": "not_tested", "probe_to_bone": "not_tested"},
-    )
-    assert outcome.combined_grade is Grade.NO_FLAG
+        "foot", {"monofilament": "not_tested", "probe_to_bone": "not_tested"})
+    assert outcome.answer_grade is Grade.NO_FLAG
     assert set(outcome.not_tested) == {"monofilament", "probe_to_bone"}
     # An untested test produces no trigger -- it is neither positive nor
     # negative, and must not be scored as either.
     assert outcome.triggers == []
 
 
-def test_combination_rule_rest_pain_with_absent_pulses_is_more_urgent():
-    """Rest pain alone routes to review; with an absent pulse it is urgent."""
-    alone = followup.evaluate("foot", Grade.NO_FLAG, {"rest_pain": "yes"})
-    combined = followup.evaluate(
-        "foot", Grade.NO_FLAG,
-        {"rest_pain": "yes", "pedal_pulses": "both_absent"})
-    assert alone.combined_grade is Grade.REVIEW
-    assert combined.combined_grade is Grade.URGENT
+def test_rest_pain_with_absent_pulses_is_more_urgent_than_either():
+    """A combination rule inside the answers themselves."""
+    alone = followup.evaluate("foot", {"rest_pain": "yes"})
+    with_pulses = followup.evaluate(
+        "foot", {"rest_pain": "yes", "pedal_pulses": "both_absent"})
+    assert alone.answer_grade is Grade.REVIEW
+    assert with_pulses.answer_grade is Grade.URGENT
 
 
 # --- validation --------------------------------------------------------------
 
 def test_unknown_field_is_rejected_not_ignored():
     with pytest.raises(followup.UnknownFollowUpField):
-        followup.evaluate("foot", Grade.NO_FLAG, {"blood_pressure": "120/80"})
+        followup.evaluate("foot", {"blood_pressure": "120/80"})
 
 
 def test_out_of_vocabulary_value_is_rejected():
     with pytest.raises(followup.InvalidFollowUpAnswer):
-        followup.evaluate("foot", Grade.NO_FLAG, {"pedal_pulses": "maybe"})
+        followup.evaluate("foot", {"pedal_pulses": "maybe"})
 
 
 def test_non_numeric_answer_to_a_number_question_is_rejected():
     with pytest.raises(followup.InvalidFollowUpAnswer):
-        followup.evaluate("foot", Grade.NO_FLAG, {"duration_weeks": "ages"})
+        followup.evaluate("foot", {"duration_weeks": "ages"})
 
 
 def test_blank_answers_are_dropped_rather_than_stored():
-    outcome = followup.evaluate(
-        "foot", Grade.NO_FLAG, {"pedal_pulses": "", "rest_pain": None})
+    outcome = followup.evaluate("foot", {"pedal_pulses": "", "rest_pain": None})
     assert outcome.answered == {}
     assert "pedal_pulses" in outcome.unanswered
 
@@ -148,8 +126,7 @@ def test_blank_answers_are_dropped_rather_than_stored():
 def test_no_trigger_recommends_treatment_or_medication(module):
     for question in followup.questions_for(module):
         for value in (question.options or [99]):
-            outcome = followup.evaluate(module, Grade.NO_FLAG,
-                                        {question.id: value})
+            outcome = followup.evaluate(module, {question.id: value})
             for trigger in outcome.triggers:
                 blob = " ".join([
                     trigger.finding, trigger.because,
@@ -163,8 +140,7 @@ def test_no_trigger_recommends_treatment_or_medication(module):
 def test_no_trigger_asserts_an_internal_diagnosis(module):
     for question in followup.questions_for(module):
         for value in (question.options or [99]):
-            outcome = followup.evaluate(module, Grade.NO_FLAG,
-                                        {question.id: value})
+            outcome = followup.evaluate(module, {question.id: value})
             for trigger in outcome.triggers:
                 for text in (trigger.finding, trigger.because,
                              trigger.distinguished_by):
@@ -177,8 +153,7 @@ def test_every_trigger_offers_a_differential_and_a_discriminator(module):
     """Same rule as the clinical layer: never a single possibility asserted."""
     for question in followup.questions_for(module):
         for value in (question.options or [99]):
-            outcome = followup.evaluate(module, Grade.NO_FLAG,
-                                        {question.id: value})
+            outcome = followup.evaluate(module, {question.id: value})
             for trigger in outcome.triggers:
                 assert len(trigger.consider) >= 2, (
                     f"{module}.{question.id} offers a single possibility: "
@@ -209,7 +184,8 @@ async def test_questions_endpoint_publishes_the_rule(client, auth):
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert len(body["questions"]) >= 5
-    assert "never lower" in body["combination_rule"]
+    assert "answers alone" in body["combination_rule"]
+    assert "not an input" in body["combination_rule"]
     assert body["safety"]["clinical_use"] is False
 
 
@@ -225,16 +201,19 @@ async def test_answers_escalate_a_stored_case(client, auth, ref_factory):
     )
     assert resp.status_code == 201, resp.text
     body = resp.json()
+    # The image's observation is RECORDED beside the answers, never combined.
     assert body["image_grade"] == "no_flag"
-    assert body["combined_grade"] == "urgent"
-    assert body["escalated"] is True
+    assert body["answer_grade"] == "urgent"
+    assert body["triggered"] is True
     assert body["note"].startswith("Wound over")
     assert body["safety"]["clinical_use"] is False
     assert len(body["outcome"]["triggers"]) == 2
 
 
-async def test_answers_do_not_de_escalate_a_stored_case(client, auth,
-                                                        ref_factory):
+async def test_an_urgent_photograph_does_not_grade_the_answers(client, auth,
+                                                               ref_factory):
+    """The image is recorded and ignored. Its grade appears beside the answers
+    so a reader can see what was photographed, and takes no part in routing."""
     case_id, image_grade = await _analysed_case(
         client, auth, ref_factory, "foot_urgent")
     assert image_grade == "urgent"
@@ -247,9 +226,9 @@ async def test_answers_do_not_de_escalate_a_stored_case(client, auth,
     )
     assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body["answer_grade"] == "no_flag"
-    assert body["combined_grade"] == "urgent"
-    assert body["escalated"] is False
+    assert body["image_grade"] == "urgent"      # recorded
+    assert body["answer_grade"] == "no_flag"    # and not combined
+    assert body["triggered"] is False
 
 
 async def test_note_alone_is_accepted(client, auth, ref_factory):
@@ -259,7 +238,7 @@ async def test_note_alone_is_accepted(client, auth, ref_factory):
         json={"note": "Patient declined the monofilament test today."},
     )
     assert resp.status_code == 201, resp.text
-    assert resp.json()["combined_grade"] == "no_flag"
+    assert resp.json()["answer_grade"] == "no_flag"
 
 
 async def test_unknown_field_returns_an_actionable_error(client, auth,
