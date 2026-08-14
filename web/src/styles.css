@@ -819,3 +819,6 @@ button.danger:disabled { opacity: .45; }
 }
 .progress-bar > span { display: block; height: 100%; background: var(--brand); }
 .progress-value { min-width: 5rem; text-align: end; font-variant-numeric: tabular-nums; }
+
+/* The sentence that replaces a confidence figure on a no-flag result. */
+.no-flag-meaning { margin-top: .5rem; opacity: .95; line-height: 1.45; }

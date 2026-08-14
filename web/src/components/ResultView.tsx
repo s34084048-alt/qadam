@@ -30,16 +30,32 @@ export function TriageCard({ analysis }: { analysis: Analysis }) {
       <div className="grade">{triage.grade.replace('_', ' ')}</div>
       <div className="label">{triage.label}</div>
       <div className="meta">
-        {t('result.confidence')}: {(triage.confidence * 100).toFixed(0)}%
-        {' · '}
+        {/* NO CONFIDENCE FIGURE ON A NO-FLAG. The number is a
+            distance-from-threshold measure, and on a clean foot it always sits
+            at its ceiling — so the result where over-confidence is most
+            dangerous displayed the highest number the system can express, and
+            "85%" reads as "85% sure this foot is fine". A photograph cannot
+            support that: it does not see perfusion, sensation or depth. What
+            replaces it is the sentence that is actually true. */}
+        {triage.grade !== 'no_flag' && (
+          <>
+            {t('result.distance')}: {(triage.confidence * 100).toFixed(0)}%
+            {' · '}
+          </>
+        )}
         {t('result.quality')}: {analysis.quality.passed
           ? t('quality.passed') : t('quality.degraded')}
         {' · '}
         {t('result.model')}: {analysis.model_version}
       </div>
-      <div className="confidence-bar" aria-hidden="true">
-        <span style={{ width: `${Math.round(triage.confidence * 100)}%` }} />
-      </div>
+      {triage.grade === 'no_flag' && (
+        <div className="meta no-flag-meaning">{t('result.noFlagMeaning')}</div>
+      )}
+      {triage.grade !== 'no_flag' && (
+        <div className="confidence-bar" aria-hidden="true">
+          <span style={{ width: `${Math.round(triage.confidence * 100)}%` }} />
+        </div>
+      )}
     </div>
   )
 }

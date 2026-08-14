@@ -114,6 +114,8 @@ class ClassicalCVBackend:
             mask = np.full(image_bgr.shape[:2], 255, dtype=np.uint8)
             subject = mask > 0
 
+        self._background_warning = None
+        mask = self._widen_if_the_segmentation_split_skin(image_bgr, mask)
         mask = self._widen_if_the_lesion_became_the_subject(image_bgr, mask, module)
         unexpected = self._note_if_subject_is_unexpected(image_bgr, mask)
 
@@ -121,6 +123,9 @@ class ClassicalCVBackend:
             "foot": self._foot,
         }[module]
         result = fn(image_bgr, mask, quality)
+        if self._background_warning:
+            result.features["framing_warning"] = self._background_warning
+            result.triage.rationale.insert(0, self._background_warning["effect"])
         if unexpected:
             result.features["subject_check"] = unexpected
             result.triage.rationale.insert(0, unexpected["warning"])
@@ -129,6 +134,56 @@ class ClassicalCVBackend:
         return result
 
     # -- what each module needs to see before it measures anything ----------
+
+    def _widen_if_the_segmentation_split_skin(self, bgr, mask):
+        """Undo a segmentation that cut one continuous skin surface in half.
+
+        `estimate_subject_mask` models the background from the image border. On
+        a plain backdrop that works. Photograph a toe on a beige mat, a wooden
+        table or a bedsheet — anything close to skin colour — and the border
+        model is partly skin, so the "subject" comes back as an arbitrary
+        fragment of the toe.
+
+        Nothing then errors: every percentage is simply computed against the
+        wrong denominator. A real capture from the field showed this, and the
+        answer happened to be right, which is worse than an error because it
+        looks like it worked.
+
+        The signature is a small selected region whose SURROUND is also skin.
+        Two pieces of skin are one surface, so the frame is the subject.
+        """
+        _L, a, b = cv_utils.lab_planes(bgr)
+        subject = mask > 0
+        frame_share = float(subject.mean())
+        if frame_share >= 0.55 or subject.sum() < 100:
+            return mask
+
+        outside = (~subject).astype(np.uint8) * 255
+        if (outside > 0).sum() < 500:
+            return mask
+        inside_skin, _ = cv_utils.looks_like_skin(a, b, mask)
+        outside_skin, _ = cv_utils.looks_like_skin(a, b, outside)
+        if inside_skin and outside_skin:
+            # Widening keeps the denominator stable and interpretable, where a
+            # fragment makes every percentage arbitrary. But the whole frame
+            # now includes background, so an area is UNDERSTATED — and that is
+            # the direction that hides things. Say so.
+            self._background_warning = {
+                "issue": "background_same_colour_as_skin",
+                "effect": (
+                    "The foot could not be separated from the background "
+                    "because they are a similar colour, so every percentage "
+                    "below is measured against the whole frame and is "
+                    "UNDERSTATED."
+                ),
+                "advice": (
+                    "Re-take the photograph on a plain background that "
+                    "contrasts with skin — a blue or green cloth or paper "
+                    "sheet is ideal."
+                ),
+            }
+            return np.full(bgr.shape[:2], 255, dtype=np.uint8)
+        return mask
 
     def _widen_if_the_lesion_became_the_subject(self, bgr, mask, module: str):
         """Fix a segmentation that picked the wound instead of the limb.

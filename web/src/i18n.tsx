@@ -342,6 +342,9 @@ const en: Dict = {
 
   'result.triage': 'Triage',
   'result.confidence': 'Confidence',
+  'result.distance': 'Distance from threshold',
+  'result.noFlagMeaning':
+    'No surface feature was detected — that is all this means. It is not a measure of how healthy the foot is, and it does not exclude ischaemia, neuropathy, infection or anything beneath the skin.',
   'result.nextStep': 'Recommended next step',
   'result.routeTo': 'Route to',
   'result.timeframe': 'Timeframe',
@@ -740,6 +743,9 @@ const ar: Dict = {
 
   'result.triage': 'الفرز',
   'result.confidence': 'مستوى الثقة',
+  'result.distance': 'المسافة من العتبة',
+  'result.noFlagMeaning':
+    'لم تُكتشف أي سمة سطحية — هذا كل ما يعنيه الأمر. ليس قياساً لسلامة القدم، ولا يستبعد نقص التروية أو الاعتلال العصبي أو العدوى أو أي شيء تحت الجلد.',
   'result.nextStep': 'الخطوة التالية الموصى بها',
   'result.routeTo': 'التوجيه إلى',
   'result.timeframe': 'الإطار الزمني',
