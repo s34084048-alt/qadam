@@ -77,6 +77,16 @@ export function Capture({ onAnalyze, busy, disabled }: Props) {
     }
   }
 
+  /** The path that cannot fail: the phone's own camera app.
+   *
+   *  No getUserMedia, so no permission prompt to deny, no secure-context
+   *  requirement, no device enumeration, no driver constraints, no autoplay
+   *  policy and no black-preview race. Every failure below ends here. */
+  const useDeviceCamera = useCallback(() => {
+    setCameraError(null)
+    captureRef.current?.click()
+  }, [])
+
   async function startCamera() {
     setCameraError(null)
     setStarting(true)
@@ -100,7 +110,15 @@ export function Capture({ onAnalyze, busy, disabled }: Props) {
       }
       setStream(media)
     } catch (err) {
+      // Do NOT stop at an error message. The live preview is an optional
+      // convenience and it has failed for six different reasons across this
+      // project's life -- permission, secure context, driver, another app
+      // holding the device, autoplay, enumeration. Every one of them is
+      // invisible to the person holding the phone, who only knows "the camera
+      // does not work". Hand them the camera app instead and say why
+      // afterwards, so a failure costs a sentence rather than the visit.
       setCameraError(describe(err))
+      useDeviceCamera()
     } finally {
       setStarting(false)
     }
@@ -108,17 +126,31 @@ export function Capture({ onAnalyze, busy, disabled }: Props) {
 
   function shoot() {
     const video = videoRef.current
-    if (!video || !video.videoWidth) return
+    // A silent return here is indistinguishable from a dead button, and this
+    // is a real state: the stream is attached but the first frame has not
+    // arrived, so videoWidth is still 0. It used to do nothing at all.
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      setCameraError(t('camera.notReady'))
+      return
+    }
     const canvas = document.createElement('canvas')
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
     const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    if (!ctx) {
+      setCameraError(t('camera.failed'))
+      useDeviceCamera()
+      return
+    }
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
     canvas.toBlob((blob) => {
       canvas.width = 0
       canvas.height = 0
-      if (!blob) return
+      if (!blob) {
+        setCameraError(t('camera.failed'))
+        useDeviceCamera()
+        return
+      }
       stopCamera()
       void accept(blob, 'capture.jpg')
     }, 'image/jpeg', 0.92)
@@ -204,50 +236,53 @@ export function Capture({ onAnalyze, busy, disabled }: Props) {
         />
       )}
 
-      {!supported && (
-        <p className="hint" role="note">{t('camera.insecure')}</p>
-      )}
+      {/* Not an error panel. By the time this shows, the camera app has
+          already been opened — the message explains why the preview is not
+          there, it does not block anything. */}
       {cameraError && (
-        <div className="error-panel" role="alert" style={{ marginTop: '.6rem' }}>
-          <p>{cameraError}</p>
-          <p className="hint">{t('camera.uploadInstead')}</p>
-          <div className="actions">
-            <button type="button" onClick={() => captureRef.current?.click()}>
-              {t('new.capture.deviceCamera')}
-            </button>
-          </div>
-        </div>
+        <p className="hint" role="status" style={{ marginTop: '.6rem' }}>
+          {cameraError} {t('camera.fellBack')}
+        </p>
       )}
 
       <div className="actions">
         {!live && !preview && (
           <>
-            <button
-              type="button"
-              onClick={startCamera}
-              disabled={disabled || starting || !supported}
-            >
-              {starting ? t('camera.starting') : t('new.capture.camera')}
-            </button>
-            {/* Opens the phone's own camera app. It needs no getUserMedia
-                permission and no secure context, so it keeps working when the
-                in-app camera is blocked -- which is the common case. */}
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => captureRef.current?.click()}
-              disabled={disabled}
+            {/* PRIMARY, and a <label> rather than a button ON PURPOSE.
+                A label activates its input NATIVELY — no JavaScript in the
+                path at all. The previous version called .click() on an input
+                with `hidden`, and several mobile browsers refuse to open a
+                picker for a display:none input from a synthetic click: the
+                button does nothing, silently, with no error to report. That is
+                indistinguishable from "the camera is broken", and it is the
+                one failure mode a user cannot work around.
+                The input below is offscreen but RENDERED, so activation works
+                everywhere, and `disabled` on it makes this label inert. */}
+            <label
+              className={`as-button${disabled ? ' is-disabled' : ''}`}
+              htmlFor="qadam-device-camera"
             >
               {t('new.capture.deviceCamera')}
-            </button>
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => fileRef.current?.click()}
-              disabled={disabled}
+            </label>
+            {/* Offered only where it can actually work. A disabled button that
+                says "Use camera" reads as a broken app; its absence reads as a
+                app that simply captures a different way. */}
+            {supported && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={startCamera}
+                disabled={disabled || starting}
+              >
+                {starting ? t('camera.starting') : t('new.capture.camera')}
+              </button>
+            )}
+            <label
+              className={`as-button ghost${disabled ? ' is-disabled' : ''}`}
+              htmlFor="qadam-upload"
             >
               {t('new.capture.upload')}
-            </button>
+            </label>
           </>
         )}
         {live && (
@@ -276,22 +311,31 @@ export function Capture({ onAnalyze, busy, disabled }: Props) {
             </button>
           </>
         )}
+        {/* `offscreen`, never `hidden`. A display:none file input cannot be
+            opened by a synthetic click in several mobile browsers, and a
+            label cannot activate it either. Rendered-but-invisible works
+            everywhere. `disabled` is what makes the labels above inert —
+            labels have no disabled attribute of their own. */}
         <input
+          id="qadam-upload"
           ref={fileRef}
+          className="offscreen"
           type="file"
           accept="image/png,image/jpeg,image/webp"
           onChange={onFile}
-          hidden
+          disabled={disabled}
         />
         {/* `capture` makes a phone hand this straight to its camera app.
             Desktop browsers ignore the attribute and show a file picker. */}
         <input
+          id="qadam-device-camera"
           ref={captureRef}
+          className="offscreen"
           type="file"
           accept="image/*"
           capture="environment"
           onChange={onFile}
-          hidden
+          disabled={disabled}
         />
       </div>
 

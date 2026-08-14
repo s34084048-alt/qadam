@@ -104,12 +104,16 @@ const en: Dict = {
   'camera.insecure':
     'The camera only works over HTTPS or on localhost. You appear to be on a plain http:// address, so the browser has disabled it. Open the app via localhost or an HTTPS address, or upload an image instead.',
   'camera.failed': 'The camera could not be started.',
+  'camera.notReady':
+    'The camera has not produced a picture yet. Wait a moment for the preview to appear, then press Capture again — or use the device camera app below, which always works.',
+  'camera.fellBack':
+    'The device camera app was opened instead — it needs no permission and captures at full resolution. Nothing is lost.',
   'camera.uploadInstead':
     'You can still upload a photo taken with the device camera app — the analysis is identical.',
-  'new.capture.camera': 'Use camera',
+  'new.capture.camera': 'Live preview instead',
   'new.capture.stop': 'Stop camera',
   'new.capture.shoot': 'Capture',
-  'new.capture.deviceCamera': 'Take photo (device camera app)',
+  'new.capture.deviceCamera': 'Take photo',
   'new.capture.upload': 'Upload an image',
   'new.capture.retake': 'Retake',
   'new.capture.analyze': 'Analyse',
@@ -460,12 +464,16 @@ const ar: Dict = {
   'camera.insecure':
     'تعمل الكاميرا فقط عبر HTTPS أو على localhost. يبدو أنك على عنوان http:// عادي، لذا عطّلها المتصفح. افتح التطبيق عبر localhost أو عنوان HTTPS، أو ارفع صورة بدلاً من ذلك.',
   'camera.failed': 'تعذّر تشغيل الكاميرا.',
+  'camera.notReady':
+    'لم تُنتج الكاميرا صورة بعد. انتظر قليلاً حتى تظهر المعاينة ثم اضغط «التقاط» مرة أخرى — أو استخدم كاميرا الجهاز أدناه، فهي تعمل دائماً.',
+  'camera.fellBack':
+    'فُتحت كاميرا الجهاز بدلاً من ذلك — لا تحتاج إذناً وتلتقط بأعلى دقة. لم يُفقد شيء.',
   'camera.uploadInstead':
     'ما زال بإمكانك رفع صورة التقطتها بتطبيق الكاميرا — التحليل مطابق تماماً.',
-  'new.capture.camera': 'استخدام الكاميرا',
+  'new.capture.camera': 'معاينة مباشرة بدلاً من ذلك',
   'new.capture.stop': 'إيقاف الكاميرا',
   'new.capture.shoot': 'التقاط',
-  'new.capture.deviceCamera': 'التقاط صورة (تطبيق كاميرا الجهاز)',
+  'new.capture.deviceCamera': 'التقاط صورة',
   'new.capture.upload': 'رفع صورة',
   'new.capture.retake': 'إعادة الالتقاط',
   'new.capture.analyze': 'تحليل',

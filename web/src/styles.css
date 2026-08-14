@@ -735,3 +735,40 @@ button.danger:disabled { opacity: .45; }
 .demo-entry { border: 2px solid var(--brand); }
 .demo-entry h1 { margin-top: 0; }
 .demo-entry > button { width: 100%; font-size: 1rem; padding: .7rem; }
+
+/* Offscreen but RENDERED. `hidden`/display:none breaks file inputs: several
+   mobile browsers will not open a picker for one, whether clicked by script or
+   activated by a label — the button simply does nothing, with no error. This
+   keeps the input in the layout tree where activation always works. */
+.offscreen {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* A <label> styled as a button, so the file inputs are activated natively with
+   no JavaScript anywhere in the path. */
+.as-button {
+  display: inline-block;
+  font: inherit;
+  font-weight: 400;
+  margin: 0;
+  padding: .55rem .9rem;
+  border-radius: 8px;
+  border: 1px solid var(--brand);
+  background: var(--brand);
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+}
+.as-button.ghost { background: transparent; border-color: var(--line); color: var(--ink); }
+.as-button.is-disabled { opacity: .55; cursor: not-allowed; pointer-events: none; }
+.offscreen:focus-visible + .as-button,
+.as-button:focus-within { outline: 2px solid var(--brand); outline-offset: 1px; }
+@media (pointer: coarse) { .as-button { padding: .7rem 1rem; } }
