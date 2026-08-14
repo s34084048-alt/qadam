@@ -342,6 +342,10 @@ class ClassicalCVBackend:
         self._refuse_if_the_reference_is_the_lesion(L, subject, dark_pct,
                                                     brk_pct, ery_pct)
 
+        # Is the dark area a cast shadow, or a change in the tissue?
+        character = (cv_utils.dark_region_character(bgr, dark)
+                     if dark_pct > 0 else None)
+
         lesions = (
             # NOT called necrotic tissue. A photograph cannot separate eschar
             # from a shadow, a bruise or dark pigmentation, and naming it
@@ -370,7 +374,29 @@ class ClassicalCVBackend:
                 "confirm by direct inspection."
             )
 
-        if brk_pct >= t["urgent_breakdown_pct"] or dark_pct >= t["urgent_dark_pct"]:
+        # THE SHADOW RULE. A dark area with a soft boundary and a smooth
+        # interior is cast light, and if there is no tissue loss anywhere in
+        # the frame there is nothing for it to be an eschar OF. This module
+        # once graded a healthy toe "urgent — necrotic tissue" on exactly that
+        # pattern, so it now asks for a better photograph instead of grading.
+        #
+        # The guard is the tissue-loss test: with an open wound present the
+        # rule does not apply, and a dark area beside it is never suppressed.
+        re_image = (
+            character is not None
+            and character["verdict"] == "shadow_like"
+            and brk_pct < t["review_breakdown_pct"]
+        )
+        if re_image:
+            rationale.insert(0,
+                "The dark area has a soft boundary and a smooth interior — the "
+                "signature of cast light rather than of a change in the "
+                "tissue — and there is no tissue loss in this image. No urgent "
+                "flag is raised from it. RE-IMAGE before drawing any "
+                "conclusion.")
+            grade = Grade.MONITOR if dark_pct >= t["review_dark_pct"] else Grade.NO_FLAG
+            evidence = 0.2
+        elif brk_pct >= t["urgent_breakdown_pct"] or dark_pct >= t["urgent_dark_pct"]:
             grade = Grade.URGENT
             evidence = max(dark_pct / t["urgent_dark_pct"],
                            brk_pct / t["urgent_breakdown_pct"]) / 4.0
@@ -417,6 +443,16 @@ class ClassicalCVBackend:
                 # recomputed from the remaining skin. A later reader needs this
                 # to know what "relative to the patient's own skin" meant here.
                 "skin_reference": skin_ref,
+                "dark_area_character": character,
+                "re_image_required": ({
+                    "reason": "The darkness reads as cast light, and there is "
+                              "no tissue loss in the frame to make it an "
+                              "eschar of.",
+                    "instruction": "Re-take the photograph with the phone "
+                                   "flash on, in the open, with the toes held "
+                                   "apart so nothing casts a shadow into the "
+                                   "web spaces.",
+                } if re_image else None),
                 "tissue_viability_assessed": False,
             },
         )

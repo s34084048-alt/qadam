@@ -606,3 +606,84 @@ def colour_cluster_count(bgr: np.ndarray, mask: np.ndarray, k: int = 4) -> int:
         if np.linalg.norm(centres[i] - mean_c) > 18.0:
             distinct += 1
     return max(1, distinct)
+
+
+# --- shadow or eschar --------------------------------------------------------
+#
+# The single most important discrimination this module makes, and the one it
+# got wrong in the field: a healthy toe was reported as necrotic tissue because
+# the gap between two toes is dark. Area and darkness alone cannot separate
+# them -- a shadow and an eschar are both "a dark patch".
+#
+# What separates them is the EDGE and the SURFACE.
+#
+#   A shadow is cast light. Its boundary is a gradient, because the penumbra
+#   spreads over many pixels, and its interior is as smooth as the skin under
+#   it -- there is nothing there but less light.
+#
+#   An eschar is a physical crust. Its boundary is an edge, because the tissue
+#   itself changes at that line, and its interior is rough: dried, fissured,
+#   wrinkled.
+#
+# So: measure the sharpness of the boundary, and the texture inside it.
+
+# Measured across soft/crisp/faint/deep shadows on light and dark skin
+# (13.6-30.0) and across smooth/typical/fissured crusts (271-283). Set with
+# room on both sides; a real photograph is noisier than a synthetic one, and
+# the fallback when the two measurements disagree is "indeterminate", which
+# suppresses nothing.
+SHADOW_MAX_EDGE = 60.0        # mean gradient across the boundary band
+SHADOW_MAX_TEXTURE = 6.0      # std of the high-pass response inside the region
+
+
+def dark_region_character(bgr: np.ndarray, region: np.ndarray) -> dict:
+    """Is a dark region a cast shadow, or a change in the tissue itself?
+
+    Returns the two measurements and a verdict of "shadow_like",
+    "tissue_like" or "indeterminate". It never returns a diagnosis: an eschar,
+    a bruise and dark pigmentation are all "tissue_like", and separating THOSE
+    needs a clinician's eyes and hands.
+    """
+    sel = region > 0
+    if sel.sum() < 200:
+        return {"verdict": "indeterminate", "reason": "region too small to characterise"}
+
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+
+    # Boundary sharpness: the gradient in a thin band straddling the outline.
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    band = (cv2.dilate(region, kernel, 2) > 0) & ~(cv2.erode(region, kernel, 2) > 0)
+    gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+    gradient = np.sqrt(gx * gx + gy * gy)
+    edge = float(gradient[band].mean()) if band.sum() > 50 else 0.0
+
+    # Interior texture: high-pass energy inside the region. A shadow inherits
+    # the smoothness of whatever it falls on; a crust has structure of its own.
+    smooth = cv2.GaussianBlur(gray, (0, 0), 3)
+    texture = float((gray - smooth)[sel].std())
+
+    soft_edge = edge <= SHADOW_MAX_EDGE
+    smooth_inside = texture <= SHADOW_MAX_TEXTURE
+    if soft_edge and smooth_inside:
+        verdict = "shadow_like"
+    elif not soft_edge and not smooth_inside:
+        verdict = "tissue_like"
+    else:
+        verdict = "indeterminate"
+
+    return {
+        "verdict": verdict,
+        "edge_gradient": round(edge, 2),
+        "interior_texture": round(texture, 2),
+        "thresholds": {"edge_max_for_shadow": SHADOW_MAX_EDGE,
+                       "texture_max_for_shadow": SHADOW_MAX_TEXTURE},
+        "meaning": {
+            "shadow_like": "Soft boundary and smooth interior — the signature "
+                           "of cast light, not of a change in the tissue.",
+            "tissue_like": "Defined boundary and textured interior — something "
+                           "on the skin, not a shadow. It does NOT say what: "
+                           "eschar, bruise and dark pigmentation look alike.",
+            "indeterminate": "The two measurements disagree.",
+        }[verdict],
+    }
