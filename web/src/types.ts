@@ -277,10 +277,7 @@ export interface FollowUpTrigger {
 
 export interface FollowUpOutcome {
   module: string
-  image_grade: Grade
   answer_grade: Grade
-  combined_grade: Grade
-  escalated: boolean
   triggers: FollowUpTrigger[]
   answers: Record<string, string | number>
   unanswered: string[]
@@ -294,12 +291,12 @@ export interface FollowUp {
   case_id: string
   analysis_id: string | null
   module: ModuleId
+  /** What the photograph observed. RECORDED ONLY — it routes nothing. */
   image_grade: Grade
   answer_grade: Grade
-  combined_grade: Grade
-  combined_label: string
-  combined_color: string
-  escalated: boolean
+  answer_label: string
+  answer_color: string
+  triggered: boolean
   answers: Record<string, string | number>
   outcome: FollowUpOutcome
   note: string | null
@@ -324,6 +321,35 @@ export interface CaseDeleteResult {
   note: string
 }
 
+export interface RoutingBasis {
+  source: 'iwgdf_risk_category' | 'follow_up_answers'
+  grade: Grade
+  detail: string
+  screening_interval?: string
+  triggers?: string[]
+}
+
+/**
+ * THE decision for a case. Comes from the examination and the answers; the
+ * photograph is not an input. `grade` is 'not_assessed' when nothing has been
+ * assessed yet — which is NOT the same as no_flag and must never be shown as
+ * a reassuring result.
+ */
+export interface Routing {
+  assessed: boolean
+  grade: Grade | 'not_assessed'
+  label: string
+  urgency: string
+  routing_target: string
+  next_investigation: string
+  basis: RoutingBasis[]
+  missing: string[]
+  derived_from_image: false
+  image_note: string
+  color?: string
+  note?: string
+}
+
 export interface CaseDetail {
   id: string
   module: ModuleId
@@ -335,6 +361,7 @@ export interface CaseDetail {
   created_by: string
   latest_analysis: Analysis | null
   history: Analysis[]
+  routing: Routing
 }
 
 export interface CaseListItem {

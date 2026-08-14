@@ -772,3 +772,35 @@ button.danger:disabled { opacity: .45; }
 .offscreen:focus-visible + .as-button,
 .as-button:focus-within { outline: 2px solid var(--brand); outline-offset: 1px; }
 @media (pointer: coarse) { .as-button { padding: .7rem 1rem; } }
+
+/* --- the routing decision -------------------------------------------------- */
+
+.routing-card { border: 2px solid var(--brand); }
+.routing-head {
+  border-radius: var(--radius);
+  color: #fff;
+  padding: .9rem;
+  margin-bottom: .8rem;
+}
+.routing-grade { font-size: 1.6rem; font-weight: 800; text-transform: uppercase; }
+.routing-label { font-size: 1rem; font-weight: 600; }
+
+/* Not assessed is an ABSENCE. No grade colour, nothing a reader could mistake
+   for a result — a case nobody examined must not look like one found well. */
+.routing-card.unassessed { border-color: var(--muted); border-style: dashed; }
+.routing-card.unassessed .routing-grade {
+  color: var(--muted);
+  font-size: 1.2rem;
+  letter-spacing: .04em;
+  margin-bottom: .5rem;
+}
+
+/* The photograph's own grade, demoted to evidence. */
+.triage-card.observation { opacity: .92; }
+.observed-tag {
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .09em;
+  opacity: .95;
+  margin-bottom: .3rem;
+}

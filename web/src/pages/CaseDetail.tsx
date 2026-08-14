@@ -9,6 +9,7 @@ import { Investigations } from '../components/Investigations'
 import { LabPanelForm } from '../components/LabPanelForm'
 import { LabPanelView } from '../components/LabPanelView'
 import { OverlayImage, ResultView, TriageCard } from '../components/ResultView'
+import { RoutingCard } from '../components/RoutingCard'
 import { useI18n } from '../i18n'
 import type { CaseDetail as CaseDetailType, LabPanel } from '../types'
 
@@ -41,13 +42,17 @@ export function CaseDetail() {
         {data.body_site ? ` · ${data.body_site}` : ''} · {data.status}
       </p>
 
+      {/* The decision, first and alone. Everything below it is evidence. */}
+      <RoutingCard routing={data.routing} />
+
       {!data.latest_analysis && (
         <section className="card"><p className="hint">{t('cases.none')}</p></section>
       )}
 
       {data.latest_analysis && (
         <>
-          <h2>{t('case.latest')}</h2>
+          <h2>{t('case.photoRecord')}</h2>
+          <p className="hint">{t('case.photoRecordHint')}</p>
           <ResultView analysis={data.latest_analysis} caseId={data.id} />
         </>
       )}

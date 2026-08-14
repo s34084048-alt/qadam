@@ -101,19 +101,23 @@ function QuestionRow({
 export function FollowUpOutcomeView({ entry }: { entry: FollowUpEntry }) {
   const { t } = useI18n()
   return (
-    <div className={`followup-outcome${entry.escalated ? ' escalated' : ''}`}>
+    <div className={`followup-outcome${entry.triggered ? ' escalated' : ''}`}>
       <div className="followup-grades">
-        <span>{t('followUp.imageGrade')}: <GradePill grade={entry.image_grade} /></span>
-        <span>{t('followUp.answerGrade')}: <GradePill grade={entry.answer_grade} /></span>
         <span>
-          <strong>{t('followUp.combined')}: </strong>
-          <GradePill grade={entry.combined_grade} /> {entry.combined_label}
+          <strong>{t('followUp.answerGrade')}: </strong>
+          <GradePill grade={entry.answer_grade} /> {entry.answer_label}
+        </span>
+        {/* Shown last and labelled as an observation. It is recorded beside
+            the answers so a reader can see what was photographed; it is not
+            part of the decision. */}
+        <span className="hint">
+          {t('followUp.imageObserved')}: <GradePill grade={entry.image_grade} />
         </span>
       </div>
 
-      {entry.escalated
-        ? <p className="caveat" role="alert">{t('followUp.escalated')}</p>
-        : <p className="hint">{t('followUp.notEscalated')}</p>}
+      {entry.triggered
+        ? <p className="caveat" role="alert">{t('followUp.triggered')}</p>
+        : <p className="hint">{t('followUp.noTrigger')}</p>}
 
       {entry.outcome.triggers.length > 0 && (
         <>
@@ -295,8 +299,8 @@ export function FollowUp({
           <summary>
             {new Date(entry.created_at).toLocaleString()}
             {' · '}
-            <GradePill grade={entry.combined_grade} />
-            {entry.escalated ? ` · ${t('followUp.escalated')}` : ''}
+            <GradePill grade={entry.answer_grade} />
+            {entry.triggered ? ` · ${t('followUp.triggered')}` : ''}
           </summary>
           <FollowUpOutcomeView entry={entry} />
         </details>

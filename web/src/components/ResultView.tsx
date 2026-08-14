@@ -10,15 +10,23 @@ const GRADE_VAR: Record<string, string> = {
   urgent: 'var(--grade-urgent)',
 }
 
+/**
+ * What the PHOTOGRAPH showed. Deliberately no longer styled or worded as a
+ * verdict: the case's decision is RoutingCard, and this is one piece of
+ * evidence under it. The grade is kept because it is what the image
+ * measurement produced and a reader should be able to see it — but it is
+ * labelled as an observation, and it routes nothing.
+ */
 export function TriageCard({ analysis }: { analysis: Analysis }) {
   const { t } = useI18n()
   const { triage } = analysis
   return (
     <div
-      className="triage-card"
+      className="triage-card observation"
       style={{ background: triage.color ?? GRADE_VAR[triage.grade] }}
       role="status"
     >
+      <div className="observed-tag">{t('result.observationOnly')}</div>
       <div className="grade">{triage.grade.replace('_', ' ')}</div>
       <div className="label">{triage.label}</div>
       <div className="meta">
@@ -36,17 +44,16 @@ export function TriageCard({ analysis }: { analysis: Analysis }) {
   )
 }
 
+/** Removed from the result view: the routing decision is RoutingCard, built
+ *  from the examination and the answers. Two "next steps" on one page, one of
+ *  them derived from pixels, is how a reader ends up acting on the wrong one. */
 export function NextStep({ analysis }: { analysis: Analysis }) {
   const { t } = useI18n()
-  const { triage } = analysis
   return (
-    <section className="next-step">
-      <h2>{t('result.nextStep')}</h2>
-      <div className="kv">
-        <div><strong>{t('result.timeframe')}</strong>{triage.urgency}</div>
-        <div><strong>{t('result.routeTo')}</strong>{triage.routing_target}</div>
-      </div>
-      <p>{triage.next_investigation}</p>
+    <section className="card">
+      <h2>{t('result.imageOnly')}</h2>
+      <p className="hint">{t('result.imageOnlyHint')}</p>
+      <p className="hint">{analysis.triage.next_investigation}</p>
     </section>
   )
 }

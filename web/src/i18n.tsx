@@ -301,6 +301,22 @@ const en: Dict = {
   'delete.done': 'Case deleted.',
   'delete.removed': 'Removed',
 
+  'routing.notAssessed': 'Not assessed',
+  'routing.missing': 'What is missing',
+  'routing.basis': 'What this decision rests on',
+  'routing.source.iwgdf_risk_category': 'Foot examination (IWGDF risk category)',
+  'routing.source.follow_up_answers': 'Clinician follow-up answers',
+  'case.photoRecord': 'The photograph — record, not decision',
+  'case.photoRecordHint':
+    'What the camera measured, kept so the wound can be compared over time. It is not the routing decision above and takes no part in it.',
+  'result.observationOnly': 'OBSERVED IN THE PHOTOGRAPH — NOT THE ROUTING DECISION',
+  'result.imageOnly': 'What the image alone would suggest',
+  'result.imageOnlyHint':
+    'Shown for completeness only. The case is routed on the examination and the answers, not on this.',
+  'followUp.imageObserved': 'Photograph observed',
+  'followUp.triggered': 'These answers raised a red flag',
+  'followUp.noTrigger': 'These answers raised no red flag.',
+
   'result.triage': 'Triage',
   'result.confidence': 'Confidence',
   'result.nextStep': 'Recommended next step',
@@ -659,6 +675,22 @@ const ar: Dict = {
   'delete.working': 'جارٍ الحذف…',
   'delete.done': 'تم حذف الحالة.',
   'delete.removed': 'أُزيل',
+
+  'routing.notAssessed': 'لم يُقيَّم',
+  'routing.missing': 'ما هو ناقص',
+  'routing.basis': 'على ماذا يستند هذا القرار',
+  'routing.source.iwgdf_risk_category': 'فحص القدم (فئة خطورة IWGDF)',
+  'routing.source.follow_up_answers': 'إجابات متابعة الطبيب',
+  'case.photoRecord': 'الصورة — سجل، وليست قراراً',
+  'case.photoRecordHint':
+    'ما قاسته الكاميرا، محفوظ لتتبّع الجرح عبر الزمن. ليست قرار التوجيه أعلاه ولا تشارك فيه.',
+  'result.observationOnly': 'مُلاحَظ في الصورة — ليس قرار التوجيه',
+  'result.imageOnly': 'ما قد توحي به الصورة وحدها',
+  'result.imageOnlyHint':
+    'يُعرض للاكتمال فقط. تُوجَّه الحالة بناءً على الفحص والإجابات، لا على هذا.',
+  'followUp.imageObserved': 'ما لوحظ في الصورة',
+  'followUp.triggered': 'هذه الإجابات رفعت علامة تحذير',
+  'followUp.noTrigger': 'لم ترفع هذه الإجابات أي علامة تحذير.',
 
   'result.triage': 'الفرز',
   'result.confidence': 'مستوى الثقة',
