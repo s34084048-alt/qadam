@@ -17,6 +17,7 @@ from ..errors import ApiError, not_found
 from ..models import (Analysis, Case, CaseFollowUp, FootRiskAssessment, Image,
                       InvestigationResult, LabPanel, LabResult, Lesion,
                       ModelRegistry, Patient)
+from .. import progress as progress_mod
 from .. import routing
 from ..pdf import build_case_pdf
 from ..safety import safety_block
@@ -503,6 +504,53 @@ async def list_cases(
         for case, ref, analysis, count in rows
     ]
     return CaseListOut(items=items, total=int(total), limit=limit, offset=offset)
+
+
+@router.get("/{case_id}/progress")
+async def case_progress(
+    case_id: uuid.UUID,
+    session: SessionDep,
+    user: CurrentUser,
+    measure: str = Query(
+        progress_mod.PRIMARY_MEASURE,
+        description="Which measured area to track. The SAME one is used for "
+                    "the whole series: switching between them mid-series would "
+                    "draw a trend through two different things.",
+    ),
+) -> dict:
+    """Wound area across visits, in cm².
+
+    Only photographs that carried a size reference are compared. A percentage
+    of the imaged region changes when the camera moves and the wound does not,
+    so two of them cannot be subtracted; those images are listed as excluded
+    with the reason rather than quietly averaged in.
+    """
+    case = await _load_case(session, case_id, user)
+    rows = (await session.execute(
+        select(Analysis).where(Analysis.case_id == case.id)
+        .order_by(Analysis.created_at.asc())
+    )).scalars().all()
+
+    if measure not in progress_mod.MEASURES:
+        raise ApiError(
+            400, "unknown_measure",
+            f"'{measure}' is not a tracked measurement.",
+            hint="Use one of: " + ", ".join(progress_mod.MEASURES),
+        )
+
+    built = progress_mod.build([
+        {
+            "id": row.id,
+            "created_at": row.created_at,
+            "features": (row.rationale_json or {}).get("features", {}),
+        }
+        for row in rows
+    ], measure=measure)
+    return {
+        "case_id": str(case.id),
+        **built.to_json(),
+        "safety": safety_block(case.module),
+    }
 
 
 @router.delete("/{case_id}", response_model=CaseDeleteOut)

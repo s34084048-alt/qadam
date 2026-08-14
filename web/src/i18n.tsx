@@ -317,6 +317,16 @@ const en: Dict = {
   'followUp.triggered': 'These answers raised a red flag',
   'followUp.noTrigger': 'These answers raised no red flag.',
 
+  'progress.title': 'Is the wound closing?',
+  'progress.intro':
+    'Area measured in cm² against a card of known size, across visits. Only photographs that carried a size reference are compared — a percentage of the frame changes when the camera moves and the wound does not.',
+  'progress.notEnough': 'Not enough calibrated measurements to compare yet.',
+  'progress.change': 'Area reduction',
+  'progress.absolute': 'Absolute change',
+  'progress.over': 'Over',
+  'progress.days': 'days',
+  'progress.excluded': 'Photographs that could not be compared',
+
   'result.triage': 'Triage',
   'result.confidence': 'Confidence',
   'result.nextStep': 'Recommended next step',
@@ -691,6 +701,16 @@ const ar: Dict = {
   'followUp.imageObserved': 'ما لوحظ في الصورة',
   'followUp.triggered': 'هذه الإجابات رفعت علامة تحذير',
   'followUp.noTrigger': 'لم ترفع هذه الإجابات أي علامة تحذير.',
+
+  'progress.title': 'هل يلتئم الجرح؟',
+  'progress.intro':
+    'المساحة مقيسة بالسنتيمتر المربع مقابل بطاقة معلومة الأبعاد، عبر الزيارات. تُقارن فقط الصور التي تحتوي مرجع قياس — فالنسبة المئوية من الإطار تتغير عند تحريك الكاميرا دون أن يتغير الجرح.',
+  'progress.notEnough': 'لا توجد قياسات معايَرة كافية للمقارنة بعد.',
+  'progress.change': 'انخفاض المساحة',
+  'progress.absolute': 'التغير المطلق',
+  'progress.over': 'خلال',
+  'progress.days': 'يوماً',
+  'progress.excluded': 'صور تعذّرت مقارنتها',
 
   'result.triage': 'الفرز',
   'result.confidence': 'مستوى الثقة',

@@ -313,6 +313,42 @@ export interface FollowUpList {
   total: number
 }
 
+export interface ProgressPoint {
+  at: string
+  area_cm2: number
+  analysis_id: string
+}
+
+/**
+ * Wound area across visits. The one image-derived number that corresponds to
+ * an established clinical indicator — and it still routes nothing.
+ */
+export interface Progress {
+  case_id: string
+  measure: string
+  comparable: boolean
+  points: ProgressPoint[]
+  excluded: { analysis_id: string; at: string; reason: string }[]
+  reason?: string
+  change?: {
+    baseline: ProgressPoint
+    latest: ProgressPoint
+    days_between: number
+    absolute_cm2: number
+    percent_area_reduction: number | null
+    direction: 'smaller' | 'larger' | 'unchanged'
+  }
+  prompt?: {
+    action: 'reassess' | 'on_track' | 'too_early' | 'none'
+    basis: string
+    detail: string
+  }
+  not_a_diagnosis: string
+  derived_from_image: true
+  routes_nothing: true
+  safety: SafetyBlock
+}
+
 export interface CaseDeleteResult {
   case_id: string
   deleted: Record<string, number>

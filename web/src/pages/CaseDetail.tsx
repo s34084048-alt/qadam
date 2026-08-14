@@ -10,6 +10,7 @@ import { LabPanelForm } from '../components/LabPanelForm'
 import { LabPanelView } from '../components/LabPanelView'
 import { OverlayImage, ResultView, TriageCard } from '../components/ResultView'
 import { RoutingCard } from '../components/RoutingCard'
+import { WoundProgress } from '../components/WoundProgress'
 import { useI18n } from '../i18n'
 import type { CaseDetail as CaseDetailType, LabPanel } from '../types'
 
@@ -56,6 +57,10 @@ export function CaseDetail() {
           <ResultView analysis={data.latest_analysis} caseId={data.id} />
         </>
       )}
+
+      {/* Directly under the decision: whether the wound is closing is the
+          question a surveillance programme exists to answer. */}
+      <WoundProgress caseId={caseId} />
 
       {data.latest_analysis && (
         <section className="card">

@@ -1,7 +1,7 @@
 import type {
   Analysis, CaseDeleteResult, CaseDetail, CaseList, EmergencyReference,
   Fairness, LabCatalogue, Finding, FollowUp, FollowUpList, FollowUpQuestion,
-  FootRiskAssessment, InvestigationResult, LabPanel, ModuleInfo,
+  FootRiskAssessment, InvestigationResult, LabPanel, ModuleInfo, Progress,
   Patient, SafetyBlock,
 } from './types'
 
@@ -271,6 +271,10 @@ export const api = {
     request<CaseDeleteResult>(`/cases/${caseId}?confirm=true`, {
       method: 'DELETE',
     }),
+
+  caseProgress: (caseId: string, measure?: string) =>
+    request<Progress>(
+      `/cases/${caseId}/progress${measure ? `?measure=${measure}` : ''}`),
 
   fairness: () => request<Fairness>('/admin/fairness'),
 }
