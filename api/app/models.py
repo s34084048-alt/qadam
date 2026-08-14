@@ -289,6 +289,46 @@ class CaseFollowUp(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class AnalysisFeedback(Base):
+    """What the clinician actually saw, against what the platform reported.
+
+    THIS IS THE VALIDATION DATASET, one row at a time. Every threshold in this
+    platform was tuned on synthetic images, and synthetic images have misled it
+    repeatedly — every real defect it has ever had was found by a person
+    looking at a real photograph, not by its test suite. Nothing changes that
+    except recorded disagreement.
+
+    `ground_truth` is what the clinician says is there. `verdict` is whether
+    the platform's own output was right, too alarming, or not alarming enough.
+    Together with the stored image and its measurements, those two columns are
+    what a sensitivity and specificity calculation needs.
+
+    IT CHANGES NOTHING LIVE. No grade moves because feedback was left, and no
+    threshold adapts. A system that retunes itself on unvalidated corrections
+    is a system whose behaviour nobody can state.
+    """
+
+    __tablename__ = "analysis_feedback"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id"), index=True)
+    analysis_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("analyses.id"), index=True
+    )
+    # What the platform said at the time, copied rather than joined so the row
+    # still means something after a re-analysis or a threshold change.
+    reported_grade: Mapped[str] = mapped_column(String(16), index=True)
+    model_version: Mapped[str] = mapped_column(String(64))
+    # agree | too_high | too_low | unusable_image
+    verdict: Mapped[str] = mapped_column(String(24), index=True)
+    # intact_skin | callus | open_ulcer | eschar | other | not_sure
+    ground_truth: Mapped[str | None] = mapped_column(String(32), nullable=True,
+                                                     index=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class InvestigationResult(Base):
     """The result of an investigation QADAM routed the patient to.
 

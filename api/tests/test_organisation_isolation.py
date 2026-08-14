@@ -74,11 +74,12 @@ def test_every_case_route_is_covered_by_this_file():
         f"{API}/cases/{{case_id}}/investigations",
         f"{API}/cases/{{case_id}}/summary.pdf",
         f"{API}/cases/{{case_id}}/follow-up",
+        f"{API}/cases/{{case_id}}/feedback",
     }
     # Deletion is the one case route that destroys data. It must be discovered
     # by the leak test above like every other route.
     assert ("DELETE", f"{API}/cases/{{case_id}}") in routes
-    assert len(routes) >= 12
+    assert len(routes) >= 14
 
 
 async def test_no_case_scoped_route_leaks_across_organisations(
@@ -94,6 +95,10 @@ async def test_no_case_scoped_route_leaks_across_organisations(
         f"{API}/cases/{{case_id}}/foot-risk": {"lops": "absent", "pad": "absent"},
         f"{API}/cases/{{case_id}}/follow-up":
             {"answers": {"pedal_pulses": "both_absent"}, "note": "x"},
+        # Feedback names an analysis; a random id is enough to prove the CASE
+        # check fires before the analysis one.
+        f"{API}/cases/{{case_id}}/feedback":
+            {"analysis_id": str(uuidlib.uuid4()), "verdict": "agree"},
     }
     # DELETE demands ?confirm=true. The organisation check must fire BEFORE
     # that: answering "confirmation_required" for a case belonging to another

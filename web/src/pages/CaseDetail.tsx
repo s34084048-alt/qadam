@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { DeleteCase } from '../components/DeleteCase'
 import { ErrorPanel } from '../components/ErrorPanel'
+import { Feedback } from '../components/Feedback'
 import { FollowUp } from '../components/FollowUp'
 import { FootRisk } from '../components/FootRisk'
 import { Investigations } from '../components/Investigations'
@@ -57,6 +58,12 @@ export function CaseDetail() {
           <p className="hint">{t('case.photoRecordHint')}</p>
           <ResultView analysis={data.latest_analysis} caseId={data.id} />
         </>
+      )}
+
+      {/* Immediately under the result it is about, while the clinician is
+          still looking at the photograph. */}
+      {data.latest_analysis && (
+        <Feedback caseId={caseId} analysisId={data.latest_analysis.id} />
       )}
 
       {/* Directly under the decision: whether the wound is closing is the

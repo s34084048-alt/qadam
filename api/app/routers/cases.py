@@ -14,7 +14,8 @@ from ..analysis.runner import get_runner
 from ..config import settings
 from ..deps import CurrentUser, SessionDep, load_case_scoped
 from ..errors import ApiError, not_found
-from ..models import (Analysis, Case, CaseFollowUp, FootRiskAssessment, Image,
+from ..models import (Analysis, AnalysisFeedback, Case, CaseFollowUp,
+                      FootRiskAssessment, Image,
                       InvestigationResult, LabPanel, LabResult, Lesion,
                       ModelRegistry, Patient)
 from .. import progress as progress_mod
@@ -647,6 +648,10 @@ async def delete_case(
         select(func.count()).select_from(CaseFollowUp)
         .where(CaseFollowUp.case_id == case.id)
     )).scalar_one())
+    counts["feedback"] = int((await session.execute(
+        select(func.count()).select_from(AnalysisFeedback)
+        .where(AnalysisFeedback.case_id == case.id)
+    )).scalar_one())
 
     # Children before parents. Lesions and lab results hang off rows that are
     # themselves about to go, and SQLite enforces no cascade for us.
@@ -656,6 +661,9 @@ async def delete_case(
     if panel_ids:
         await session.execute(
             delete(LabResult).where(LabResult.panel_id.in_(panel_ids)))
+    # Before analyses: a feedback row points at one.
+    await session.execute(
+        delete(AnalysisFeedback).where(AnalysisFeedback.case_id == case.id))
     await session.execute(
         delete(CaseFollowUp).where(CaseFollowUp.case_id == case.id))
     await session.execute(

@@ -238,6 +238,47 @@ class CaseDeleteOut(BaseModel):
     note: str
 
 
+# --- feedback ----------------------------------------------------------------
+
+class FeedbackCreate(BaseModel):
+    """What the clinician saw, against what was reported."""
+
+    analysis_id: uuid.UUID
+    verdict: str = Field(
+        description="agree | too_high | too_low | unusable_image",
+    )
+    ground_truth: str | None = Field(
+        default=None,
+        description="What was actually there: intact_skin | callus | "
+                    "open_ulcer | eschar | other | not_sure.",
+    )
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class FeedbackOut(BaseModel):
+    id: uuid.UUID
+    case_id: uuid.UUID
+    analysis_id: uuid.UUID
+    reported_grade: Grade
+    model_version: str
+    verdict: str
+    verdict_label: str
+    ground_truth: str | None
+    ground_truth_label: str | None
+    note: str | None
+    created_at: dt.datetime
+    created_by: uuid.UUID
+
+
+class FeedbackListOut(BaseModel):
+    case_id: uuid.UUID
+    verdicts: dict[str, str]
+    ground_truth_options: dict[str, str]
+    entries: list[FeedbackOut]
+    total: int
+    note: str
+
+
 # --- misc --------------------------------------------------------------------
 
 class HealthOut(BaseModel):

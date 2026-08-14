@@ -1,7 +1,8 @@
 import type {
   Analysis, CaseDeleteResult, CaseDetail, CaseList, EmergencyReference,
   Fairness, LabCatalogue, Finding, FollowUp, FollowUpList, FollowUpQuestion,
-  FootRiskAssessment, InvestigationResult, LabPanel, ModuleInfo, Progress,
+  FeedbackEntry, FeedbackList, FootRiskAssessment, InvestigationResult,
+  LabPanel, ModuleInfo, Progress,
   Patient, SafetyBlock,
 } from './types'
 
@@ -275,6 +276,21 @@ export const api = {
   caseProgress: (caseId: string, measure?: string) =>
     request<Progress>(
       `/cases/${caseId}/progress${measure ? `?measure=${measure}` : ''}`),
+
+  listFeedback: (caseId: string) =>
+    request<FeedbackList>(`/cases/${caseId}/feedback`),
+
+  addFeedback: (caseId: string, payload: {
+    analysis_id: string
+    verdict: string
+    ground_truth?: string | null
+    note?: string | null
+  }) =>
+    request<FeedbackEntry>(`/cases/${caseId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
 
   fairness: () => request<Fairness>('/admin/fairness'),
 }

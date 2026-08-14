@@ -349,6 +349,30 @@ export interface Progress {
   safety: SafetyBlock
 }
 
+export interface FeedbackEntry {
+  id: string
+  case_id: string
+  analysis_id: string
+  reported_grade: Grade
+  model_version: string
+  verdict: string
+  verdict_label: string
+  ground_truth: string | null
+  ground_truth_label: string | null
+  note: string | null
+  created_at: string
+  created_by: string
+}
+
+export interface FeedbackList {
+  case_id: string
+  verdicts: Record<string, string>
+  ground_truth_options: Record<string, string>
+  entries: FeedbackEntry[]
+  total: number
+  note: string
+}
+
 export interface CaseDeleteResult {
   case_id: string
   deleted: Record<string, number>

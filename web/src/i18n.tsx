@@ -345,6 +345,18 @@ const en: Dict = {
     'One or two questions chosen from what this image actually showed. Each names what its answer would settle — the point is an experiment with a result, not advice.',
   'clarify.settles': 'What the answer settles',
 
+  'feedback.title': 'Was this right?',
+  'feedback.intro':
+    'Every real defect this platform has had was found by someone looking at a real photograph — never by its tests. If it got this wrong, saying so here is the most useful thing you can do with it.',
+  'feedback.groundTruth': 'What was actually there?',
+  'feedback.groundTruthHint':
+    'Optional, but it is what turns a complaint into a measurement.',
+  'feedback.notePlaceholder': 'Anything that would help — what you saw, what it missed…',
+  'feedback.send': 'Send',
+  'feedback.sending': 'Sending…',
+  'feedback.thanks': 'Recorded. Thank you — this is how the thresholds get fixed.',
+  'feedback.previous': 'Previously recorded',
+
   'result.triage': 'Triage',
   'result.confidence': 'Confidence',
   'result.distance': 'Distance from threshold',
@@ -750,6 +762,17 @@ const ar: Dict = {
   'clarify.intro':
     'سؤال أو سؤالان مُختاران مما أظهرته هذه الصورة فعلاً. كل منهما يذكر ما ستحسمه إجابته — المقصود تجربة لها نتيجة، لا نصيحة.',
   'clarify.settles': 'ما تحسمه الإجابة',
+
+  'feedback.title': 'هل كان هذا صحيحاً؟',
+  'feedback.intro':
+    'كل خلل حقيقي في هذه المنصة اكتشفه شخص ينظر إلى صورة حقيقية — لا اختباراتها. إن أخطأت هنا، فإن قولك ذلك هو أنفع ما يمكن فعله بها.',
+  'feedback.groundTruth': 'ما الذي كان موجوداً فعلاً؟',
+  'feedback.groundTruthHint': 'اختياري، لكنه ما يحوّل الشكوى إلى قياس.',
+  'feedback.notePlaceholder': 'أي شيء يساعد — ما رأيته، وما فاتها…',
+  'feedback.send': 'إرسال',
+  'feedback.sending': 'جارٍ الإرسال…',
+  'feedback.thanks': 'سُجّل. شكراً — هكذا تُصحَّح العتبات.',
+  'feedback.previous': 'مسجَّل سابقاً',
 
   'result.triage': 'الفرز',
   'result.confidence': 'مستوى الثقة',

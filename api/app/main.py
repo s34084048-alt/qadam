@@ -13,8 +13,8 @@ from .config import settings
 from .db import create_schema
 from .errors import ApiError, api_error_handler, http_error_handler
 from .logging_conf import configure_logging
-from .routers import (admin, auth, cases, follow_up, foot, investigations,
-                      labs, meta, patients)
+from .routers import (admin, auth, cases, feedback, follow_up, foot,
+                      investigations, labs, meta, patients)
 from .safety import DEVICE_NOTICE, DISCLAIMER, INTENDED_USE
 from .version import __version__
 
@@ -153,6 +153,8 @@ app.include_router(foot.router, prefix=prefix)
 app.include_router(foot.info_router, prefix=prefix)
 app.include_router(follow_up.router, prefix=prefix)
 app.include_router(follow_up.info_router, prefix=prefix)
+app.include_router(feedback.router, prefix=prefix)
+app.include_router(feedback.admin_router, prefix=prefix)
 app.include_router(admin.router, prefix=prefix)
 
 

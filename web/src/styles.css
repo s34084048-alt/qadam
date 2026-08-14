@@ -826,3 +826,7 @@ button.danger:disabled { opacity: .45; }
 /* The questions worth asking. Given a border because they are the most
    actionable thing on the page, not a footnote. */
 .clarify { border-inline-start: 4px solid var(--brand); }
+
+/* "Was this right?" — the validation dataset. Given weight because it is the
+   only thing on the page that improves the platform. */
+.feedback { border: 2px dashed var(--brand); }
