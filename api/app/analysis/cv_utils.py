@@ -712,3 +712,81 @@ def dark_region_character(bgr: np.ndarray, region: np.ndarray) -> dict:
             "indeterminate": "The two measurements disagree.",
         }[verdict],
     }
+
+
+# --- callus or slough --------------------------------------------------------
+#
+# The same class of problem as shadow-versus-eschar, one axis over. Callus and
+# slough are both yellow and both sit on the surface, so the b* threshold that
+# finds one finds the other -- and a field capture showed exactly that: thick
+# callus on a toe was measured as "tissue breakdown".
+#
+# What differs is the MATERIAL and where it sits.
+#
+#   Callus is dry thickened keratin, continuous with the skin around it. It
+#   thickens gradually, so it has no edge at skin level, and being dry it
+#   scatters light evenly with few specular highlights.
+#
+#   Slough is moist devitalised tissue lying IN a defect. The wound margin is
+#   a real edge, and wet tissue throws specular highlights that dry keratin
+#   does not.
+#
+# Neither measurement names a diagnosis. "Callus-like" is not "harmless" --
+# an ulcer very often hides underneath callus, which is why the follow-up asks
+# whether the skin is actually broken rather than trusting this.
+
+SLOUGH_MIN_EDGE = 25.0          # wound margin gradient (callus ~15, slough ~35)
+SLOUGH_MIN_SPECULAR = 0.012     # fraction of the region that is wet-bright
+
+
+def yellow_region_character(bgr: np.ndarray, region: np.ndarray,
+                            subject: np.ndarray | None = None) -> dict:
+    """Dry keratin, or moist tissue in a defect?
+
+    Returns the measurements and a verdict of "slough_like", "callus_like" or
+    "indeterminate".
+    """
+    sel = region > 0
+    if sel.sum() < 200:
+        return {"verdict": "indeterminate",
+                "reason": "region too small to characterise"}
+
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    band = (cv2.dilate(region, kernel, 2) > 0) & ~(cv2.erode(region, kernel, 2) > 0)
+    gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+    edge = float(np.sqrt(gx * gx + gy * gy)[band].mean()) if band.sum() > 50 else 0.0
+
+    # Moisture, as specular highlights: pixels far brighter than the region's
+    # own body. Dry keratin has very few.
+    values = gray[sel]
+    ceiling = float(np.percentile(values, 50)) + 45.0
+    specular = float((values >= ceiling).mean())
+
+    defined_edge = edge >= SLOUGH_MIN_EDGE
+    wet = specular >= SLOUGH_MIN_SPECULAR
+    if defined_edge and wet:
+        verdict = "slough_like"
+    elif not defined_edge and not wet:
+        verdict = "callus_like"
+    else:
+        verdict = "indeterminate"
+
+    return {
+        "verdict": verdict,
+        "edge_gradient": round(edge, 2),
+        "specular_fraction": round(specular, 4),
+        "thresholds": {"edge_min_for_slough": SLOUGH_MIN_EDGE,
+                       "specular_min_for_slough": SLOUGH_MIN_SPECULAR},
+        "meaning": {
+            "slough_like": "A defined margin and a moist surface — consistent "
+                           "with tissue in an open defect.",
+            "callus_like": "No edge at skin level and a dry surface — "
+                           "consistent with thickened keratin. This does NOT "
+                           "mean harmless: an ulcer often lies underneath "
+                           "callus and cannot be seen until it is pared back.",
+            "indeterminate": "The two measurements disagree.",
+        }[verdict],
+    }

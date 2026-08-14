@@ -401,6 +401,17 @@ class ClassicalCVBackend:
         character = (cv_utils.dark_region_character(bgr, dark)
                      if dark_pct > 0 else None)
 
+        # And is the yellow area dry keratin, or moist tissue in a defect?
+        #
+        # NOTE THE ASYMMETRY WITH THE SHADOW RULE. A shadow is nothing, so a
+        # shadow verdict lowers the grade. Callus is NOT nothing: an ulcer very
+        # often lies underneath it and cannot be seen until it is pared back.
+        # So this verdict is reported and drives a question, and it changes no
+        # grade at all. Suppressing on it would hide exactly the wound this
+        # module exists to find.
+        yellow_character = (cv_utils.yellow_region_character(bgr, slough)
+                            if brk_pct > 0 else None)
+
         lesions = (
             # NOT called necrotic tissue. A photograph cannot separate eschar
             # from a shadow, a bruise or dark pigmentation, and naming it
@@ -501,6 +512,7 @@ class ClassicalCVBackend:
                 # to know what "relative to the patient's own skin" meant here.
                 "skin_reference": skin_ref,
                 "dark_area_character": character,
+                "yellow_area_character": yellow_character,
                 "re_image_required": ({
                     "reason": "The darkness reads as cast light, and there is "
                               "no tissue loss in the frame to make it an "

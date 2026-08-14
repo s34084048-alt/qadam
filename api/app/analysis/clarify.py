@@ -66,7 +66,29 @@ def build(features: dict[str, Any]) -> list[dict[str, str]]:
             ),
         })
 
-    # 2. Depth, whenever there is a break in the surface. A photograph is
+    # 2. Callus, when the yellow area reads as dry keratin. This does NOT
+    #    lower anything -- an ulcer under callus is invisible until it is
+    #    pared back, and that is precisely why it is worth asking.
+    yellow = (features.get("yellow_area_character") or {}).get("verdict")
+    if breakdown > 0 and yellow == "callus_like":
+        out.append({
+            "ask": ("Is the skin actually broken here, or is this thickened "
+                    "callus over intact skin? If callus, can it be pared back "
+                    "to look underneath?"),
+            "settles": (
+                "The measurement reads this as dry keratin rather than moist "
+                "tissue in a defect — but an ulcer very often lies UNDER "
+                "callus and is invisible until it is pared. Only looking "
+                "settles it."
+            ),
+            "because": (
+                "Callus and slough are both yellow and both sit on the "
+                "surface, so the colour threshold that finds one finds the "
+                "other."
+            ),
+        })
+
+    # 3. Depth, whenever there is a break in the surface. A photograph is
     #    perpendicular to the only axis that matters here.
     if breakdown > 0:
         out.append({
@@ -86,7 +108,7 @@ def build(features: dict[str, Any]) -> list[dict[str, str]]:
             ),
         })
 
-    # 3. Poor light, measured against the card rather than guessed.
+    # 4. Poor light, measured against the card rather than guessed.
     if lighting.get("assessable") and not lighting.get("adequate"):
         out.append({
             "ask": ("Re-take with more light — flash on, or in daylight — with "
@@ -99,7 +121,7 @@ def build(features: dict[str, Any]) -> list[dict[str, str]]:
             "because": lighting.get("note", ""),
         })
 
-    # 4. No size reference. Not urgent for today's decision, but it is what
+    # 5. No size reference. Not urgent for today's decision, but it is what
     #    makes the NEXT visit comparable, so it is worth one line.
     if not scale.get("available") and (dark > 0 or breakdown > 0):
         out.append({
@@ -113,7 +135,7 @@ def build(features: dict[str, Any]) -> list[dict[str, str]]:
             "because": "No size reference was found in this frame.",
         })
 
-    # 5. Nothing measured. The useful question is then about change over time,
+    # 6. Nothing measured. The useful question is then about change over time,
     #    which a single photograph cannot show.
     if not out:
         out.append({

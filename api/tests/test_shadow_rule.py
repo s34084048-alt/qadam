@@ -158,3 +158,92 @@ def test_the_rule_can_only_lower_a_grade_never_raise_one():
     """It exists to stop a false alarm. It must not be able to create one."""
     shadowed = _foot(shadow=True)
     assert shadowed.triage.grade.rank <= Grade.REVIEW.rank
+
+
+# --- callus or slough: the same problem one axis over -------------------------
+#
+# Both are yellow and both sit on the surface, so the b* threshold that finds
+# one finds the other. A field capture showed thick callus on a toe measured as
+# "tissue breakdown".
+#
+# The asymmetry with the shadow rule is the important part and is asserted
+# below: a shadow is nothing, so it lowers a grade. Callus is NOT nothing — an
+# ulcer very often lies underneath it — so it changes no grade at all.
+
+def _yellow(kind: str, *, seed=4, skin=LIGHT, thickness=22) -> dict:
+    rng = np.random.default_rng(seed)
+    img = np.full((700, 700, 3), skin, np.uint8)
+    region = np.zeros((700, 700), np.uint8)
+    cv2.circle(region, (350, 350), 110, 255, -1)
+    if kind == "callus":
+        base = np.full_like(img, (120, 190, 215))
+        base = np.clip(base + rng.normal(0, 7, base.shape), 0, 255).astype(np.uint8)
+        soft = cv2.GaussianBlur((region > 0).astype(np.float32), (0, 0),
+                                thickness)[..., None]
+        img = (img * (1 - soft) + base * soft).astype(np.uint8)
+    else:
+        wet = np.full_like(img, (110, 195, 220))
+        wet = np.clip(wet + rng.normal(0, 10, wet.shape), 0, 255).astype(np.uint8)
+        img[region > 0] = wet[region > 0]
+        for _ in range(30):
+            cx, cy = rng.integers(270, 430, 2)
+            cv2.circle(img, (int(cx), int(cy)), int(rng.integers(3, 7)),
+                       (245, 250, 252), -1)
+    img = np.clip(img + rng.normal(0, 4, img.shape), 0, 255).astype(np.uint8)
+    return cv_utils.yellow_region_character(img, region)
+
+
+@pytest.mark.parametrize("seed", [4, 11, 23])
+@pytest.mark.parametrize("thickness", [14, 22, 30])
+def test_dry_keratin_reads_as_callus(seed, thickness):
+    assert _yellow("callus", seed=seed,
+                   thickness=thickness)["verdict"] == "callus_like"
+
+
+@pytest.mark.parametrize("skin", [LIGHT, MID, DARK], ids=["light", "mid", "dark"])
+def test_the_verdict_holds_across_skin_tones(skin):
+    assert _yellow("callus", skin=skin)["verdict"] == "callus_like"
+    assert _yellow("slough", skin=skin)["verdict"] == "slough_like"
+
+
+@pytest.mark.parametrize("seed", [4, 11, 23])
+def test_moist_tissue_in_a_defect_reads_as_slough(seed):
+    assert _yellow("slough", seed=seed)["verdict"] == "slough_like"
+
+
+def test_callus_never_lowers_a_grade():
+    """THE ASYMMETRY. A shadow verdict lowers the grade because a shadow is
+    nothing. A callus verdict must not, because an ulcer very often lies under
+    callus and is invisible until it is pared back — suppressing here would
+    hide the wound this module exists to find."""
+    W, H = 1200, 900
+    rng = np.random.default_rng(4)
+    img = np.full((H, W, 3), (150, 95, 45), np.uint8)
+    cv2.ellipse(img, (600, 450), (280, 340), 0, 0, 360, LIGHT, -1)
+    region = np.zeros((H, W), np.uint8)
+    cv2.circle(region, (600, 430), 95, 255, -1)
+    base = np.full_like(img, (120, 190, 215))
+    base = np.clip(base + rng.normal(0, 7, base.shape), 0, 255).astype(np.uint8)
+    soft = cv2.GaussianBlur((region > 0).astype(np.float32), (0, 0), 22)[..., None]
+    img = (img * (1 - soft) + base * soft).astype(np.uint8)
+    img = np.clip(img + rng.normal(0, 5, img.shape), 0, 255).astype(np.uint8)
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 93])
+    assert ok
+
+    out = execute(AnalysisJob(image_bytes=buf.tobytes(), module="foot",
+                              render_overlay=False))
+    assert out.result is not None
+    assert out.result.features["yellow_area_character"]["verdict"] == "callus_like"
+    # The grade is untouched, and there is no re-image suppression from it.
+    assert out.result.triage.grade is Grade.URGENT
+    assert out.result.features["re_image_required"] is None
+
+    # What it DOES do is ask the question only a person can answer.
+    asks = " ".join(q["ask"] for q in out.result.features["clarifying_questions"])
+    assert "skin actually broken" in asks
+
+
+def test_the_callus_verdict_says_it_is_not_reassurance():
+    meaning = _yellow("callus")["meaning"]
+    assert "does NOT mean harmless" in meaning
+    assert "ulcer often lies underneath" in meaning
