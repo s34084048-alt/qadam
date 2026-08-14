@@ -15,7 +15,9 @@ from . import calibration, clinical, cv_utils
 from .backends import get_backend
 from .overlay import render_overlay
 from .quality import run_quality_gate
-from .types import ModuleResult, QualityReport, SubjectMismatch
+from .modules_config import routing_for
+from .types import (Grade, ModuleResult, QualityReport,
+                    SubjectMismatch)
 
 
 class UnreadableImage(ValueError):
@@ -158,6 +160,42 @@ def execute(job: AnalysisJob) -> AnalysisOutput:
     # compared between visits; cm² can. Both are reported, and the absence of
     # cm² is stated rather than left to be inferred.
     result.features["measurement"] = _measurements(result, cal)
+
+    # The card as a light meter. Underexposure compresses every dark-area
+    # comparison toward the bottom of the range, so a foot photographed in poor
+    # light produces dark regions that are dark because of the lamp.
+    lighting = calibration.lighting_from_card(
+        cal.card, result.features.get("subject_L_median"))
+    result.features["lighting"] = lighting
+    if lighting.get("assessable") and not lighting.get("adequate"):
+        result.triage.rationale.insert(0, lighting["note"])
+
+        # THE SAME RULE AS THE SHADOW ONE, from a different measurement. A dark
+        # area in a capture the card proves was underexposed is not evidence of
+        # anything on its own, so it raises no urgent flag — and the guard is
+        # identical: tissue loss anywhere in the frame disarms it, because a
+        # badly lit ulcer is still an ulcer.
+        features = result.features
+        no_tissue_loss = float(features.get("breakdown_pct", 0.0)) < 0.4
+        darkness_drove_it = float(features.get("dark_area_pct", 0.0)) > 0
+        if no_tissue_loss and darkness_drove_it and result.triage.grade.rank >= 2:
+            spec = routing_for(job.module, str(Grade.MONITOR))
+            result.triage.grade = Grade.MONITOR
+            result.triage.label = spec["label"]
+            result.triage.urgency = spec["urgency"]
+            result.triage.routing_target = spec["routing_target"]
+            result.triage.next_investigation = spec["next_investigation"]
+            result.triage.confidence = min(result.triage.confidence, 0.3)
+            result.features["re_image_required"] = {
+                "reason": "The reference card shows the capture was "
+                          "underexposed, and there is no tissue loss in the "
+                          "frame. A dark area here is not evidence on its own.",
+                "instruction": lighting.get(
+                    "advice", "Re-take with more light."),
+            }
+            result.triage.rationale.insert(
+                0, "No urgent flag is raised from darkness in an "
+                   "underexposed image. RE-IMAGE with more light.")
     if cal.applied:
         result.triage.rationale.append(
             "Colours were corrected using a neutral reference card in the "

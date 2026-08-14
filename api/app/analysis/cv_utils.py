@@ -314,13 +314,12 @@ def find_reference_card(
             < REFERENCE_MIN_SEPARATION_L):
         return None
 
-    neutral = bright_sel.astype(np.uint8) * 255
-    neutral = clean_binary(neutral, min(h, w))
-
-    n, labels, stats, centroids = cv2.connectedComponentsWithStats(neutral, 8)
-    if n <= 1:
-        return None
-
+    # BOTH populations are candidates, not just the brighter one. The obvious
+    # assumption -- the card is the brightest neutral thing -- inverts in the
+    # case that matters most: an UNDERexposed white card next to well-lit skin
+    # renders DARKER than the skin, and skin is neutral enough to be in this
+    # set. The card being invisible exactly when the light is bad would defeat
+    # using it to detect bad light.
     # The region a card may legitimately occupy: the subject's own bounding box
     # grown by 60%. Measuring centre-to-centre distance instead penalises a
     # card laid neatly beside a LARGE subject, which is precisely how the
@@ -338,6 +337,27 @@ def find_reference_card(
         # used to tell card from subject.
         if (subject_mask > 0).mean() < 0.90:
             subject_sel = subject_mask > 0
+
+    candidates: list[dict] = []
+    for population in (bright_sel, dim_sel):
+        found = _card_from_population(
+            population, bgr, L, a, b, frame_area, h, w, near_box, subject_sel)
+        if found:
+            candidates.append(found)
+    if not candidates:
+        return None
+    # The most neutral one. A card is the least colourful thing in frame.
+    return min(candidates, key=lambda c: c["chroma_mean"])
+
+
+def _card_from_population(population, bgr, L, a, b, frame_area, h, w,
+                          near_box, subject_sel) -> dict | None:
+    neutral = population.astype(np.uint8) * 255
+    neutral = clean_binary(neutral, min(h, w))
+
+    n, labels, stats, centroids = cv2.connectedComponentsWithStats(neutral, 8)
+    if n <= 1:
+        return None
 
     best: dict | None = None
     for label in range(1, n):
@@ -392,7 +412,12 @@ def find_reference_card(
             sel = component
             patch = component.astype(np.uint8) * 255
 
-        if best is None or area > best["area_px"]:
+        # The LEAST COLOURFUL valid candidate, not the largest. Skin is
+        # neutral enough to enter this set and is usually the biggest thing in
+        # frame, so picking by area hands back the foot instead of the card
+        # whenever the card is brighter than the skin -- which is the normal
+        # case for a white card.
+        if best is None or best["chroma_mean"] > float(chroma(a, b)[sel].mean()):
             best = {
                 "area_px": area,
                 "area_frac": frac,

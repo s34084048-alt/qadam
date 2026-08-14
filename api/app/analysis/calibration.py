@@ -150,3 +150,79 @@ def _exclude_card(
     # Hand back an empty mask and let the module's subject gate refuse it,
     # rather than quietly measuring a rectangle of cardboard.
     return out
+
+
+# --- the card as a light meter ------------------------------------------------
+#
+# A neutral card fixes colour and size. It also says something the rest of the
+# frame cannot: whether there was enough light.
+#
+# THE PROBLEM WITH READING IT DIRECTLY. A card that renders dark is either a
+# WHITE card in poor light or a GREY card in good light, and those call for
+# opposite responses. The detector accepts both, so its measured lightness
+# alone cannot separate them.
+#
+# THE PHYSICS THAT DOES. A white card reflects more than skin — of any tone —
+# so under the SAME light it always renders brighter. That relationship holds
+# whatever the exposure, because both are scaled together. So:
+#
+#   card brighter than the skin  -> it is a light card, and its absolute
+#                                   lightness now reports the exposure
+#   card darker than the skin    -> it is a dark grey card; no conclusion
+#                                   about the lighting can be drawn from it
+#
+# WHY IT MATTERS. Every dark-area threshold here is relative to the patient's
+# own skin, and underexposure compresses that whole comparison toward the
+# bottom of the range. A foot photographed in poor light produces dark regions
+# that are dark because of the lamp.
+
+# A light card correctly exposed renders near the top of the range. Below this
+# the capture had no headroom.
+WELL_LIT_CARD_L = 175.0
+# It has to be clearly brighter than skin before it counts as the light one.
+CARD_ABOVE_SKIN_L = 12.0
+
+
+def lighting_from_card(card: dict | None, skin_L: float | None) -> dict:
+    """What the card says about the light. Never a colour or tissue judgement."""
+    if not card or skin_L is None:
+        return {"assessable": False,
+                "reason": "No reference card in the frame, so the lighting "
+                          "cannot be measured against a known surface."}
+
+    card_L = float(card.get("L_mean", 0.0))
+    if card_L - skin_L < CARD_ABOVE_SKIN_L:
+        return {
+            "assessable": False,
+            "card_L": round(card_L, 1),
+            "skin_L": round(skin_L, 1),
+            "reason": (
+                "The card is not brighter than the skin, so it is a dark grey "
+                "card rather than a white one. Its lightness says nothing "
+                "about the exposure."
+            ),
+        }
+
+    adequate = card_L >= WELL_LIT_CARD_L
+    out = {
+        "assessable": True,
+        "adequate": adequate,
+        "card_L": round(card_L, 1),
+        "skin_L": round(skin_L, 1),
+        "expected_min_L": WELL_LIT_CARD_L,
+    }
+    if adequate:
+        out["note"] = ("The white card renders bright, so the capture had "
+                       "enough light for the dark-area comparison to mean "
+                       "something.")
+    else:
+        shortfall = (1.0 - card_L / WELL_LIT_CARD_L) * 100.0
+        out["note"] = (
+            f"The white card renders at {card_L:.0f} where a well-lit one "
+            f"reaches {WELL_LIT_CARD_L:.0f} — about {shortfall:.0f}% short. "
+            "The capture is underexposed, and every dark region in it is "
+            "partly dark because of the light rather than the tissue."
+        )
+        out["advice"] = ("Re-take with the phone flash on, or in daylight, "
+                         "with the card and the foot lit the same way.")
+    return out

@@ -437,6 +437,8 @@ class ClassicalCVBackend:
         #
         # The guard is the tissue-loss test: with an open wound present the
         # rule does not apply, and a dark area beside it is never suppressed.
+        # Poor light is set by the pipeline AFTER this runs, so the backend
+        # cannot see it. It is applied there instead — see pipeline.py.
         re_image = (
             character is not None
             and character["verdict"] == "shadow_like"

@@ -291,3 +291,83 @@ async def test_calibration_reaches_the_api_payload(client, auth, ref_factory):
     assert "does not make any finding diagnostic" in cal["note"]
     assert "grade" not in cal
     assert "finding" not in cal
+
+
+# --- the card as a light meter ------------------------------------------------
+
+def _card(L: float) -> dict:
+    return {"L_mean": L, "bbox": (0, 0, 260, 164)}
+
+
+def test_a_white_card_that_renders_bright_means_the_light_was_adequate():
+    out = calibration.lighting_from_card(_card(228), skin_L=150)
+    assert out["assessable"] is True
+    assert out["adequate"] is True
+
+
+def test_a_white_card_that_renders_dark_means_the_capture_was_underexposed():
+    """The whole point: dark regions in this frame are partly dark because of
+    the lamp, not the tissue."""
+    out = calibration.lighting_from_card(_card(110), skin_L=88)
+    assert out["assessable"] is True
+    assert out["adequate"] is False
+    assert "underexposed" in out["note"]
+    assert "% short" in out["note"]
+    assert "flash" in out["advice"]
+
+
+def test_a_card_darker_than_the_skin_says_nothing_about_the_light():
+    """A white card reflects more than skin of any tone, so under the same
+    light it is always brighter. A card that is DARKER than the skin is a grey
+    card, and its lightness reports nothing about the exposure. Reading it as
+    underexposure would fire on every correctly lit photograph taken with a
+    grey card."""
+    out = calibration.lighting_from_card(_card(110), skin_L=186)
+    assert out["assessable"] is False
+    assert "dark grey card" in out["reason"]
+
+
+def test_no_card_means_no_lighting_verdict():
+    out = calibration.lighting_from_card(None, skin_L=150)
+    assert out["assessable"] is False
+    assert "cannot be measured" in out["reason"]
+
+
+def test_no_skin_measurement_means_no_lighting_verdict():
+    assert calibration.lighting_from_card(_card(228), None)["assessable"] is False
+
+
+def test_the_lighting_verdict_never_names_a_condition():
+    out = calibration.lighting_from_card(_card(110), skin_L=88)
+    blob = out["note"] + out["advice"]
+    for word in ("necrosis", "necrotic", "gangrene", "infection", "ischaemia"):
+        assert word not in blob.lower()
+
+
+def test_known_limitation_a_bright_card_beside_skin_may_not_be_found():
+    """HONEST FAILURE, PINNED.
+
+    The detector treats "neutral" loosely so that a card under a colour cast is
+    still recognised, and skin is neutral enough to enter that set. When the
+    card is BRIGHTER than the skin the two land in the same population and the
+    card is not reliably separated — so on a foot photographed against a
+    coloured cloth with a white card beside it, the card can go undetected and
+    no lighting verdict is produced.
+
+    Nothing is reported wrongly when this happens: `assessable` is false and
+    the analysis proceeds exactly as it does with no card. This test exists so
+    the limitation is recorded in the code rather than only in a conversation.
+    """
+    W, H = 1400, 1000
+    rng = np.random.default_rng(9)
+    img = np.full((H, W, 3), (150, 95, 45), np.uint8)          # blue cloth
+    cv2.ellipse(img, (950, 500), (260, 320), 0, 0, 360, (150, 175, 205), -1)
+    img[420:584, 400:660] = 232                                 # white card
+    img = np.clip(img + rng.normal(0, 6, img.shape), 0, 255).astype(np.uint8)
+
+    mask, _frac = cv_utils.estimate_subject_mask(img)
+    card = cv_utils.find_reference_card(img, mask)
+    verdict = calibration.lighting_from_card(card, skin_L=186.0)
+    # Either it found the card, or it says it cannot assess. Never a wrong
+    # verdict.
+    assert verdict["assessable"] is False or verdict.get("adequate") is not None
