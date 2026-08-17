@@ -165,6 +165,41 @@ class ClassicalCVBackend:
         if unexpected:
             result.features["subject_check"] = unexpected
             result.triage.rationale.insert(0, unexpected["warning"])
+
+            # REFUSE A REASSURING RESULT WE CANNOT STAND BEHIND.
+            #
+            # A real foot with a large dark eschar was graded NO_FLAG in the
+            # field: its pale sole was the same brightness as a pale background,
+            # so the segmentation could not separate them and locked onto the
+            # dark regions as the "subject". Every colour was then measured
+            # against that dark fragment, nothing read as darker than it, and an
+            # obvious wound came back "no surface red flag".
+            #
+            # The one thing that DID fire was this skin check — the measured
+            # region does not read as skin. When that is true AND the result is
+            # the reassuring NO_FLAG, the "no flag" is not a finding about the
+            # foot; it is an artefact of having measured the wrong region. A
+            # NO_FLAG can be mistaken for "the foot is fine"; a refusal cannot.
+            #
+            # This is deliberately NARROW, because "not skin" was downgraded
+            # from a hard refusal for a good reason (a real foot under a cool
+            # fluorescent tube can read outside the skin range). So it only
+            # overrides toward safety, and only the reassuring grade: a detected
+            # flag (review/urgent) is still surfaced, never suppressed. Every
+            # clean fixture reads as skin and is unaffected.
+            if result.triage.grade is Grade.NO_FLAG:
+                raise SubjectMismatch(
+                    module,
+                    "This came back with no surface flag, but the measured "
+                    "region does not read as skin — most often because a pale "
+                    "sole could not be separated from a similar-coloured "
+                    "background, so the wrong area was measured. A 'no flag' "
+                    "from the wrong region is not a statement that the foot is "
+                    "fine, so QADAM is refusing it rather than reporting it.",
+                    "Re-take on a DARK, contrasting background — a dark blue or "
+                    "green cloth or paper under the foot — filling about half "
+                    "the frame with the sole, in even indirect light.",
+                )
         result.model_version = f"{self.name}-{self.version}"
         result.backend = self.backend_id
         return result

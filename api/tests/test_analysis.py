@@ -351,25 +351,38 @@ async def test_a_dark_area_is_never_called_necrotic(client, auth, ref_factory):
 
 # --- wrong subject ------------------------------------------------------------
 
-def test_a_non_skin_photograph_is_flagged_rather_than_refused():
-    """This WAS a hard refusal, and the refusal has been withdrawn on purpose.
+def test_a_no_flag_on_a_non_skin_region_is_refused():
+    """A reassuring NO_FLAG on a region that does not read as skin is REFUSED.
 
-    It existed because the eye module scored the warm tone of a photograph of a
-    FOOT as scleral yellowing and answered "urgent" at 0.85 confidence. There
-    is no eye module now, and — the decisive part — the image no longer routes
-    anything: routing comes from the examination and the answers. A meaningless
-    measurement is now visible nonsense rather than a clinical decision.
+    This REVERSES an earlier decision, and the reversal is evidence-driven.
 
-    Meanwhile the refusal had a measured cost: light skin under a fluorescent
-    tube reads as "not skin" and was rejected outright. Clinics have
-    fluorescent tubes.
+    The non-skin refusal was once withdrawn for a real reason: a foot under a
+    cool fluorescent tube can read as "not skin", and refusing a real foot over
+    the lamp above it was a worse failure than analysing a desk. The theory was
+    that a meaningless measurement would be harmless "visible nonsense" because
+    the image routes nothing.
+
+    A field case disproved the theory. A real diabetic foot with a large dark
+    eschar came back NO_FLAG: its pale sole was the same brightness as a pale
+    background, so segmentation could not separate them, the dark fragment was
+    measured instead of the foot, and nothing read as darker than it. "NO FLAG
+    — no surface red flag" was read as reassurance, not nonsense. A NO_FLAG that
+    cannot even confirm it measured skin is now refused, with re-capture
+    guidance, rather than reported.
+
+    The reversal is NARROW — it overrides ONLY the reassuring grade. A detected
+    flag on a non-skin region is still surfaced (test_the_right_subject_is_
+    never_refused, and the detected-flag test in test_subject_not_skin_refusal),
+    so a real fluorescent foot WITH a finding is never refused; only a "nothing
+    here" the module cannot stand behind.
     """
     import cv2
     import numpy as np
 
     from app.analysis.pipeline import AnalysisJob, execute
 
-    # A plain grey-blue scene. Nothing in it is skin of any tone.
+    # A plain grey-blue scene. Nothing in it is skin of any tone, and there is
+    # nothing on it to flag — so the result would otherwise be a NO_FLAG.
     rng = np.random.default_rng(9)
     img = np.full((900, 1200, 3), (150, 120, 95), np.uint8)
     cv2.circle(img, (600, 450), 300, (190, 150, 110), -1)
@@ -379,14 +392,10 @@ def test_a_non_skin_photograph_is_flagged_rather_than_refused():
 
     out = execute(AnalysisJob(image_bytes=buf.tobytes(), module="foot",
                               render_overlay=False))
-    assert out.subject_error is None, "a plausible capture was refused"
-    assert out.result is not None
-
-    check = out.result.features["subject_check"]
-    assert check["looks_like_skin"] is False
-    assert "meaningless" in check["warning"]
-    # And the warning leads the rationale, so it cannot be scrolled past.
-    assert out.result.triage.rationale[0] == check["warning"]
+    assert out.result is None, "a no-flag on a non-skin region was reported, not refused"
+    assert out.subject_error is not None
+    assert "does not read as skin" in out.subject_error.reason
+    assert "contrasting background" in out.subject_error.hint.lower()
 
 
 @pytest.mark.parametrize("sample", ANALYSABLE, ids=[s.name for s in ANALYSABLE])
@@ -404,11 +413,12 @@ def test_the_right_subject_is_never_refused(sample):
 
 
 
-async def test_a_non_skin_photograph_is_analysed_but_flagged(client, auth,
-                                                             ref_factory):
-    """Accepted and recorded, with the doubt stated in the result rather than
-    withheld as an error. The image routes nothing, so a wrong number here is
-    visible rather than decisive."""
+async def test_a_no_flag_on_a_non_skin_photograph_is_refused_by_the_api(
+    client, auth, ref_factory):
+    """End to end: the API refuses a NO_FLAG it cannot stand behind with a 422
+    and re-capture guidance, instead of storing a reassuring result. See
+    test_a_no_flag_on_a_non_skin_region_is_refused for why this reverses the
+    earlier 'analyse and warn' behaviour."""
     import cv2
     import numpy as np
 
@@ -426,18 +436,15 @@ async def test_a_non_skin_photograph_is_analysed_but_flagged(client, auth,
         f"{API}/cases/{case_id}/analyze", headers=auth,
         files={"file": ("f.png", buf.tobytes(), "image/png")},
     )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    check = body["features"]["subject_check"]
-    assert check["looks_like_skin"] is False
-    assert check["advice"].strip()
-    assert body["triage"]["rationale"][0] == check["warning"]
+    assert resp.status_code == 422, resp.text
+    err = resp.json()["error"]
+    assert err["code"] == "subject_not_recognised"
+    assert "contrasting background" in (err.get("hint") or "").lower()
 
-    # Stored, and the case is still NOT routed by it.
+    # Nothing reassuring was stored: no analysis, and the case is not routed.
     case = (await client.get(f"{API}/cases/{case_id}", headers=auth)).json()
-    assert case["latest_analysis"] is not None
+    assert case["latest_analysis"] is None
     assert case["routing"]["grade"] == "not_assessed"
-    assert case["history"] == []
 
 
 def test_quality_gate_is_resolution_invariant():
@@ -717,25 +724,38 @@ async def test_a_dark_area_is_never_called_necrotic(client, auth, ref_factory):
 
 # --- wrong subject ------------------------------------------------------------
 
-def test_a_non_skin_photograph_is_flagged_rather_than_refused():
-    """This WAS a hard refusal, and the refusal has been withdrawn on purpose.
+def test_a_no_flag_on_a_non_skin_region_is_refused():
+    """A reassuring NO_FLAG on a region that does not read as skin is REFUSED.
 
-    It existed because the eye module scored the warm tone of a photograph of a
-    FOOT as scleral yellowing and answered "urgent" at 0.85 confidence. There
-    is no eye module now, and — the decisive part — the image no longer routes
-    anything: routing comes from the examination and the answers. A meaningless
-    measurement is now visible nonsense rather than a clinical decision.
+    This REVERSES an earlier decision, and the reversal is evidence-driven.
 
-    Meanwhile the refusal had a measured cost: light skin under a fluorescent
-    tube reads as "not skin" and was rejected outright. Clinics have
-    fluorescent tubes.
+    The non-skin refusal was once withdrawn for a real reason: a foot under a
+    cool fluorescent tube can read as "not skin", and refusing a real foot over
+    the lamp above it was a worse failure than analysing a desk. The theory was
+    that a meaningless measurement would be harmless "visible nonsense" because
+    the image routes nothing.
+
+    A field case disproved the theory. A real diabetic foot with a large dark
+    eschar came back NO_FLAG: its pale sole was the same brightness as a pale
+    background, so segmentation could not separate them, the dark fragment was
+    measured instead of the foot, and nothing read as darker than it. "NO FLAG
+    — no surface red flag" was read as reassurance, not nonsense. A NO_FLAG that
+    cannot even confirm it measured skin is now refused, with re-capture
+    guidance, rather than reported.
+
+    The reversal is NARROW — it overrides ONLY the reassuring grade. A detected
+    flag on a non-skin region is still surfaced (test_the_right_subject_is_
+    never_refused, and the detected-flag test in test_subject_not_skin_refusal),
+    so a real fluorescent foot WITH a finding is never refused; only a "nothing
+    here" the module cannot stand behind.
     """
     import cv2
     import numpy as np
 
     from app.analysis.pipeline import AnalysisJob, execute
 
-    # A plain grey-blue scene. Nothing in it is skin of any tone.
+    # A plain grey-blue scene. Nothing in it is skin of any tone, and there is
+    # nothing on it to flag — so the result would otherwise be a NO_FLAG.
     rng = np.random.default_rng(9)
     img = np.full((900, 1200, 3), (150, 120, 95), np.uint8)
     cv2.circle(img, (600, 450), 300, (190, 150, 110), -1)
@@ -745,14 +765,10 @@ def test_a_non_skin_photograph_is_flagged_rather_than_refused():
 
     out = execute(AnalysisJob(image_bytes=buf.tobytes(), module="foot",
                               render_overlay=False))
-    assert out.subject_error is None, "a plausible capture was refused"
-    assert out.result is not None
-
-    check = out.result.features["subject_check"]
-    assert check["looks_like_skin"] is False
-    assert "meaningless" in check["warning"]
-    # And the warning leads the rationale, so it cannot be scrolled past.
-    assert out.result.triage.rationale[0] == check["warning"]
+    assert out.result is None, "a no-flag on a non-skin region was reported, not refused"
+    assert out.subject_error is not None
+    assert "does not read as skin" in out.subject_error.reason
+    assert "contrasting background" in out.subject_error.hint.lower()
 
 
 @pytest.mark.parametrize("sample", ANALYSABLE, ids=[s.name for s in ANALYSABLE])
