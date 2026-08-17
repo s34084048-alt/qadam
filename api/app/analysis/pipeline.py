@@ -141,7 +141,8 @@ def execute(job: AnalysisJob) -> AnalysisOutput:
     overlay_png = None
     if job.render_overlay:
         annotated = render_overlay(
-            image, result.lesions, result.triage, quality, job.module
+            image, result.lesions, result.triage, quality, job.module,
+            features=result.features,
         )
         overlay_png = cv_utils.encode_png(annotated)
 

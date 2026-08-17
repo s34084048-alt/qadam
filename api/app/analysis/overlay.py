@@ -76,15 +76,42 @@ def _band(img: np.ndarray, y0: int, y1: int, color, alpha: float = 0.78) -> None
     img[y0:y1] = cv2.addWeighted(overlay, alpha, strip, 1.0 - alpha, 0)
 
 
+# The wound-localization palette, applied on top of the per-feature boxes.
+# RED   — a boundary with evidence of actual tissue disruption
+# YELLOW — a surface change whose nature is unresolved
+# BLUE   — shadow / callus / lighting artifact: explicitly NOT a wound
+WOUND_RED = (60, 60, 220)
+UNCERTAIN_YELLOW = (40, 190, 235)
+ARTIFACT_BLUE = (220, 150, 40)
+
+
+def _role_color(kind: str, features: dict) -> tuple[int, int, int]:
+    """Colour a per-feature box by what its character verdict makes of it, so a
+    shadow reads BLUE and a slough bed reads RED even though both are 'a mask'."""
+    dv = (features.get("dark_area_character") or {}).get("verdict")
+    yv = (features.get("yellow_area_character") or {}).get("verdict")
+    if kind == "dark_area":
+        return {"tissue_like": WOUND_RED,
+                "shadow_like": ARTIFACT_BLUE}.get(dv, UNCERTAIN_YELLOW)
+    if kind == "tissue_breakdown":
+        return {"slough_like": WOUND_RED,
+                "callus_like": ARTIFACT_BLUE}.get(yv, UNCERTAIN_YELLOW)
+    if kind == "erythema":
+        return UNCERTAIN_YELLOW
+    return KIND_COLOR.get(kind, DEFAULT_COLOR)
+
+
 def render_overlay(
     image_bgr: np.ndarray,
     lesions: list[Lesion],
     triage: Triage,
     quality: QualityReport,
     module: str,
+    features: dict | None = None,
 ) -> np.ndarray:
     img = image_bgr.copy()
     h, w = img.shape[:2]
+    features = features or {}
     # Text size tracks image width so the burned-in notice keeps a constant
     # RELATIVE size. Capping this at 1.0 made the disclaimer about a fifth of
     # its intended height on a 4000 px phone capture -- effectively unreadable
@@ -100,19 +127,56 @@ def render_overlay(
         )
         cv2.drawContours(img, contours, -1, (180, 180, 180), thin)
 
-    # Findings.
+    # A per-feature box must never claim MORE than the wound-localisation
+    # decision. If localisation downgraded the region (plausibility guard, poor
+    # quality) or drew no wound box at all, a feature box may not stay RED
+    # "possible wound" — that is exactly the guard the overlay would otherwise
+    # visually undo.
+    wl_class = (features.get("wound_localization") or {}).get("classification")
+    wound_confirmed = wl_class == "confirmed_possible_wound"
+
+    # Per-feature boxes, coloured by role: RED tissue disruption, YELLOW
+    # unresolved, BLUE shadow/callus/artifact. Drawn thin, because the wound
+    # boundary below is the primary annotation.
     for lesion in lesions:
-        color = KIND_COLOR.get(lesion.kind, DEFAULT_COLOR)
+        color = _role_color(lesion.kind, features)
+        if color == WOUND_RED and not wound_confirmed:
+            color = UNCERTAIN_YELLOW      # never over-claim past localisation
         x, y, bw, bh = lesion.bbox
-        cv2.rectangle(img, (x, y), (x + bw, y + bh), color, max(1, thin + 1))
+        cv2.rectangle(img, (x, y), (x + bw, y + bh), color, max(1, thin))
+        tag = "artifact" if color == ARTIFACT_BLUE else (
+            "possible wound" if color == WOUND_RED else "uncertain")
         label = _ascii(
-            f"{KIND_LABEL.get(lesion.kind, lesion.kind)} {lesion.area_pct:.1f}%"
+            f"{KIND_LABEL.get(lesion.kind, lesion.kind)} [{tag}] "
+            f"{lesion.area_pct:.1f}%"
         )
-        (tw, th), _ = cv2.getTextSize(label, font, 0.45 * scale, thin)
+        (tw, th), _ = cv2.getTextSize(label, font, 0.42 * scale, thin)
         ty = max(th + 4, y - 4)
         cv2.rectangle(img, (x, ty - th - 4), (x + tw + 6, ty + 2), color, cv2.FILLED)
-        cv2.putText(img, label, (x + 3, ty - 2), font, 0.45 * scale,
+        cv2.putText(img, label, (x + 3, ty - 2), font, 0.42 * scale,
                     (255, 255, 255), thin, cv2.LINE_AA)
+
+    # The wound boundary: one box, drawn only where there is evidence of tissue
+    # disruption. RED for a confirmed possible wound, YELLOW for an uncertain
+    # surface abnormality. Absent entirely on a healthy foot, a shadow or a
+    # callus — see localization.py.
+    wl = features.get("wound_localization") or {}
+    box = wl.get("box")
+    if wl.get("present") and box:
+        confirmed = wl.get("classification") == "confirmed_possible_wound"
+        wcolor = WOUND_RED if confirmed else UNCERTAIN_YELLOW
+        bx, by, bw2, bh2 = box["x"], box["y"], box["w"], box["h"]
+        cv2.rectangle(img, (bx, by), (bx + bw2, by + bh2), wcolor,
+                      max(2, thin + 2))
+        wlabel = _ascii(
+            "POSSIBLE WOUND - CLINICAL ASSESSMENT REQUIRED" if confirmed
+            else "UNCERTAIN SURFACE CHANGE - CLINICAL ASSESSMENT REQUIRED")
+        (tw, th), _ = cv2.getTextSize(wlabel, font, 0.5 * scale, thin + 1)
+        ly = min(h - 4, by + bh2 + th + 8)
+        cv2.rectangle(img, (bx, ly - th - 6), (bx + tw + 8, ly + 4), wcolor,
+                      cv2.FILLED)
+        cv2.putText(img, wlabel, (bx + 4, ly - 2), font, 0.5 * scale,
+                    (255, 255, 255), max(1, thin + 1), cv2.LINE_AA)
 
     # Grade band, top.
     style = GRADE_STYLE[str(triage.grade)]
@@ -122,7 +186,7 @@ def render_overlay(
     grade_text = _ascii(f"{style['label_en'].upper()} - {triage.label}")
     cv2.putText(img, grade_text, (10, int(band_h * 0.45) + 4), font,
                 0.62 * scale, (255, 255, 255), max(1, thin + 1), cv2.LINE_AA)
-    meta = (f"module: {module} | confidence {triage.confidence:.2f} | "
+    meta = (f"module: {module} | evidence {triage.confidence:.2f} (uncal.) | "
             f"quality {'PASS' if quality.passed else 'DEGRADED'}")
     cv2.putText(img, meta, (10, band_h - 6), font, 0.42 * scale,
                 (255, 255, 255), thin, cv2.LINE_AA)

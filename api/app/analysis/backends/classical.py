@@ -15,7 +15,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from .. import cv_utils, evidence
+from .. import cv_utils, evidence, localization
 from ..modules_config import routing_for
 from ..types import (Grade, Lesion, ModuleResult, QualityReport,
                      SubjectMismatch, Triage)
@@ -431,6 +431,20 @@ class ClassicalCVBackend:
         yellow_character = (cv_utils.yellow_region_character(bgr, slough)
                             if brk_pct > 0 else None)
 
+        # WOUND LOCALIZATION. A single boundary drawn only where there is
+        # evidence of tissue disruption — reusing the character verdicts above,
+        # so a shadow or callus never becomes a wound box. It changes no grade;
+        # see localization.py.
+        wound = localization.localize(
+            dark_mask=dark,
+            dark_verdict=(character or {}).get("verdict"),
+            slough_mask=slough,
+            slough_verdict=(yellow_character or {}).get("verdict"),
+            erythema_mask=erythema,
+            subject_mask=mask,
+            quality_factor=quality.confidence_factor,
+        )
+
         lesions = (
             # NOT called necrotic tissue. A photograph cannot separate eschar
             # from a shadow, a bruise or dark pigmentation, and naming it
@@ -585,6 +599,8 @@ class ClassicalCVBackend:
                 # lowered to meet it.
                 "evidence": report.to_json(),
                 "grade_capped_by_evidence": capped,
+                # Where the wound is, drawn only where tissue is disrupted.
+                "wound_localization": wound.to_json(),
                 "re_image_required": ({
                     "reason": "The darkness reads as cast light, and there is "
                               "no tissue loss in the frame to make it an "
