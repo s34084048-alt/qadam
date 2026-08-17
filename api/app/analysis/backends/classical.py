@@ -15,7 +15,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from .. import cv_utils
+from .. import cv_utils, evidence
 from ..modules_config import routing_for
 from ..types import (Grade, Lesion, ModuleResult, QualityReport,
                      SubjectMismatch, Triage)
@@ -48,9 +48,22 @@ T = {
 
 
 def _conf(evidence: float, quality: QualityReport) -> float:
-    """Confidence = how far the evidence sits from the decision boundary,
-    discounted by image quality. Capped at 0.85: an unvalidated placeholder
-    model has no business reporting near-certainty."""
+    """An UNCALIBRATED EVIDENCE-STRENGTH HEURISTIC. Not a probability.
+
+    This is how far the measurement sits from its decision boundary, discounted
+    by image quality. Every constant below — the 0.45 floor, the 0.40 slope,
+    the 0.85 ceiling, the 0.15 floor — is a hand-chosen heuristic, NOT a value
+    fitted to data. This project has no labelled clinical images, so nothing
+    here could be calibrated even in principle right now.
+
+    It therefore must never be read as P(the grade is correct), and the UI must
+    never label it "confidence" for the same reason (it says "evidence strength
+    (uncalibrated)" — see web result.evidenceStrengthHint). "0.55" means "a
+    little past the boundary on a decent capture", not "55% chance of a wound".
+
+    Clinical sensitivity and specificity of this score are UNKNOWN. The 0.85
+    ceiling exists precisely so an unvalidated placeholder cannot display
+    near-certainty; it is a guard, not a calibrated maximum."""
     base = 0.45 + 0.40 * float(np.clip(evidence, 0.0, 1.0))
     return float(np.clip(base * quality.confidence_factor, 0.15, 0.85))
 
@@ -394,6 +407,12 @@ class ClassicalCVBackend:
         dark_pct = cv_utils.area_pct(dark, mask)
         brk_pct = cv_utils.area_pct(slough, mask)
 
+        # Is each region ONE thing, or a scatter that happens to sum? An area
+        # percentage cannot tell the difference, and the urgent thresholds are
+        # areas. See evidence.py.
+        dark_coherence = cv_utils.region_coherence(dark)
+        brk_coherence = cv_utils.region_coherence(slough)
+
         self._refuse_if_the_reference_is_the_lesion(L, subject, dark_pct,
                                                     brk_pct, ery_pct)
 
@@ -463,32 +482,77 @@ class ClassicalCVBackend:
                 "flag is raised from it. RE-IMAGE before drawing any "
                 "conclusion.")
             grade = Grade.MONITOR if dark_pct >= t["review_dark_pct"] else Grade.NO_FLAG
-            evidence = 0.2
+            strength = 0.2
         elif brk_pct >= t["urgent_breakdown_pct"] or dark_pct >= t["urgent_dark_pct"]:
             grade = Grade.URGENT
-            evidence = max(dark_pct / t["urgent_dark_pct"],
+            strength = max(dark_pct / t["urgent_dark_pct"],
                            brk_pct / t["urgent_breakdown_pct"]) / 4.0
             rationale.insert(0, "Visible tissue breakdown and/or an extensive "
                                 "dark area meets the urgent threshold.")
         elif dark_pct >= t["review_dark_pct"]:
             grade = Grade.REVIEW
-            evidence = dark_pct / t["urgent_dark_pct"]
+            strength = dark_pct / t["urgent_dark_pct"]
             rationale.insert(0, "A discrete dark area is present. This routes "
                                 "for a clinician to look at the foot — it does "
                                 "not assert that the tissue is non-viable.")
         elif brk_pct >= t["review_breakdown_pct"] or ery_pct >= t["review_erythema_pct"]:
             grade = Grade.REVIEW
-            evidence = max(brk_pct / t["review_breakdown_pct"],
+            strength = max(brk_pct / t["review_breakdown_pct"],
                            ery_pct / t["review_erythema_pct"]) / 3.0
             rationale.insert(0, "Surface changes exceed the review threshold.")
         elif ery_pct >= t["monitor_erythema_pct"]:
             grade = Grade.MONITOR
-            evidence = ery_pct / t["review_erythema_pct"]
+            strength = ery_pct / t["review_erythema_pct"]
             rationale.insert(0, "Mild surface erythema only.")
         else:
             grade = Grade.NO_FLAG
-            evidence = 1.0 - min(1.0, ery_pct / max(t["monitor_erythema_pct"], 1e-6))
+            strength = 1.0 - min(1.0, ery_pct / max(t["monitor_erythema_pct"], 1e-6))
             rationale.insert(0, "No surface red flag detected in this image.")
+
+        # THE EVIDENCE CEILING. Everything above decides what the AREAS say.
+        # This decides whether the areas are entitled to say it: whether each
+        # region is coherent, whether its character was actually established
+        # rather than merely undisputed, and whether the capture was good
+        # enough to read. It can only ever lower the grade — a layer that could
+        # raise one could invent an emergency out of a bad photograph.
+        report = evidence.assess(
+            {
+                "dark_area_pct": dark_pct,
+                "breakdown_pct": brk_pct,
+                "erythema_pct": ery_pct,
+                "dark_area_character": character,
+                "yellow_area_character": yellow_character,
+                "dark_coherence": dark_coherence,
+                "breakdown_coherence": brk_coherence,
+            },
+            quality_factor=quality.confidence_factor,
+        )
+        capped = False
+        if grade.rank > report.ceiling.rank:
+            capped = True
+            # Only from findings that were actually MEASURED. A finding with no
+            # area has no evidence to be insufficient, and quoting its limit
+            # would explain the grade with a region that is not in the image.
+            limits = [
+                line for fnd in report.findings
+                if not fnd.sufficient_for_urgent
+                and float(fnd.measurements.get("area_pct", 0.0) or 0.0) > 0
+                for line in fnd.limits
+            ]
+            # Every reason, not just the first: the grade a clinician sees was
+            # lowered from what the areas alone said, and "why" is not a
+            # footnote.
+            for line in reversed(limits):
+                rationale.insert(0, line)
+            rationale.insert(0,
+                f"The measured areas reach the {grade} threshold, but the "
+                f"visual evidence does not support it, so this is graded "
+                f"{report.ceiling} — a clinician looks at the foot.")
+            grade = report.ceiling
+            # Confidence follows the EVIDENCE, not the area. A grade that had
+            # to be capped is a grade the module is unsure of, and it must not
+            # keep the confidence its raw area would have earned.
+            strength = min(strength, 0.25)
 
         rationale.append(
             "Depth, bone involvement, infection, perfusion and neuropathy are "
@@ -496,7 +560,7 @@ class ClassicalCVBackend:
         )
         return ModuleResult(
             lesions=lesions,
-            triage=_triage("foot", grade, _conf(evidence, quality), rationale),
+            triage=_triage("foot", grade, _conf(strength, quality), rationale),
             features={
                 "erythema_pct": round(ery_pct, 3),
                 "breakdown_pct": round(brk_pct, 3),
@@ -513,6 +577,14 @@ class ClassicalCVBackend:
                 "skin_reference": skin_ref,
                 "dark_area_character": character,
                 "yellow_area_character": yellow_character,
+                "dark_coherence": dark_coherence,
+                "breakdown_coherence": brk_coherence,
+                # What the pixels were allowed to claim, and why. This is the
+                # audit trail for the grade: a reader can see the ceiling, the
+                # reason for it, and whether the area-based grade had to be
+                # lowered to meet it.
+                "evidence": report.to_json(),
+                "grade_capped_by_evidence": capped,
                 "re_image_required": ({
                     "reason": "The darkness reads as cast light, and there is "
                               "no tissue loss in the frame to make it an "

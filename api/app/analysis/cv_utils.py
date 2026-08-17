@@ -530,6 +530,43 @@ def area_pct(mask: np.ndarray, subject_mask: np.ndarray) -> float:
     return float((mask > 0).sum()) / subject * 100.0
 
 
+def region_coherence(mask: np.ndarray) -> dict:
+    """Is this ONE thing, or a scatter of unrelated specks that happen to sum?
+
+    Every area in this module is a total: `area_pct` counts pixels and does not
+    care whether they touch. Twenty separated flecks of slightly yellower skin
+    -- freckles, mottling, JPEG blocking, a sprinkle of talc -- sum to exactly
+    the same percentage as one wound of that size, and the same threshold fires
+    on both.
+
+    A wound is a connected thing with a boundary. Scattered colour variation is
+    not, and a percentage alone cannot tell them apart.
+
+    `dominant_fraction` is the largest connected component's share of the mask.
+    Near 1.0 the region is one object; near 0 it is confetti. This measures
+    SPATIAL ARRANGEMENT ONLY -- it says nothing about what the region is.
+    """
+    sel = (mask > 0).astype(np.uint8)
+    total = float(sel.sum())
+    if total <= 0:
+        return {"components": 0, "dominant_fraction": 0.0, "dominant_px": 0.0,
+                "total_px": 0.0}
+
+    n, _labels, stats, _c = cv2.connectedComponentsWithStats(sel, connectivity=8)
+    if n <= 1:
+        return {"components": 0, "dominant_fraction": 0.0, "dominant_px": 0.0,
+                "total_px": total}
+
+    areas = stats[1:, cv2.CC_STAT_AREA].astype(np.float64)
+    dominant = float(areas.max())
+    return {
+        "components": int(n - 1),
+        "dominant_fraction": round(dominant / total, 4),
+        "dominant_px": round(dominant, 1),
+        "total_px": round(total, 1),
+    }
+
+
 def mask_asymmetry(mask: np.ndarray) -> float:
     """Reflect the region about its principal axis through the centroid and
     measure the mismatch. A proxy for asymmetric swelling -- 0 = symmetric."""
@@ -746,6 +783,21 @@ def yellow_region_character(bgr: np.ndarray, region: np.ndarray,
     Returns the measurements and a verdict of "slough_like", "callus_like" or
     "indeterminate".
     """
+    # Fill interior holes FIRST. The mask arrives from a b* (yellowness)
+    # threshold, and a specular highlight is near-white — neutral, not yellow —
+    # so every wet spot is punched OUT of the region before it gets here. That
+    # is the exact signal this function measures moisture by, which meant a
+    # wetter wound scored as DRIER: the more it glistened, the more holes were
+    # cut and the fewer bright pixels remained inside to count.
+    #
+    # A highlight sits IN the wound. Filling puts it back before measuring.
+    region = region.copy()
+    contours, _ = cv2.findContours(region, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if contours:
+        filled = np.zeros_like(region)
+        cv2.drawContours(filled, contours, -1, 255, thickness=cv2.FILLED)
+        region = filled
+
     sel = region > 0
     if sel.sum() < 200:
         return {"verdict": "indeterminate",

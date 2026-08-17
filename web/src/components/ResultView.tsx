@@ -48,6 +48,11 @@ export function TriageCard({ analysis }: { analysis: Analysis }) {
         {' · '}
         {t('result.model')}: {analysis.model_version}
       </div>
+      {triage.grade !== 'no_flag' && (
+        <div className="meta evidence-strength-hint">
+          {t('result.evidenceStrengthHint')}
+        </div>
+      )}
       {triage.grade === 'no_flag' && (
         <div className="meta no-flag-meaning">{t('result.noFlagMeaning')}</div>
       )}
@@ -57,6 +62,101 @@ export function TriageCard({ analysis }: { analysis: Analysis }) {
         </div>
       )}
     </div>
+  )
+}
+
+type EvidenceFinding = {
+  kind: string
+  observed: string
+  ceiling: string
+  sufficient_for_urgent: boolean
+  limits: string[]
+  measurements: { area_pct?: number }
+}
+
+type EvidenceReport = {
+  appearance: string
+  appearance_meaning: string
+  ceiling: string
+  ceiling_meaning: string
+  findings: EvidenceFinding[]
+  notes: string[]
+  cannot_be_determined_from_a_photograph: string[]
+  parameter_status: string
+}
+
+/**
+ * Observation, limit, and meaning — kept apart on the page because they are
+ * apart in the code.
+ *
+ * The failure this answers: a healthy foot was shown "URGENT" beside a large
+ * confidence figure, and nothing on screen distinguished "these pixels are
+ * darker than those pixels" from "this tissue is dying". A reader had no way
+ * to see that the first was all the system ever had.
+ *
+ * So each finding states what was OBSERVED in the image in terms of pixels,
+ * and — when the grade was lowered — why the evidence did not carry further.
+ * Nothing here is phrased as a diagnosis; test_evidence_gate.py asserts that
+ * the disease vocabulary never appears in these strings.
+ */
+export function EvidencePanel({ analysis }: { analysis: Analysis }) {
+  const { t } = useI18n()
+  const report = analysis.features?.evidence as EvidenceReport | undefined
+  if (!report) return null
+  const capped = Boolean(analysis.features?.grade_capped_by_evidence)
+  // Only findings that were actually measured. Filtered on the NUMBER, not on
+  // the wording of `observed` — prose changes, and a filter that reads English
+  // would silently show every empty finding the first time a string is
+  // reworded or translated.
+  const live = report.findings.filter((f) => (f.measurements?.area_pct ?? 0) > 0)
+
+  return (
+    <section className="card evidence">
+      <h2>{t('evidence.title')}</h2>
+
+      <div className={`appearance ${report.appearance}`}>
+        <strong>
+          {t(`evidence.appearance.${report.appearance}`)}
+        </strong>
+        <p className="hint">{report.appearance_meaning}</p>
+      </div>
+
+      {capped && <div className="caveat" role="alert">{t('evidence.capped')}</div>}
+
+      <h3>{t('evidence.observed')}</h3>
+      <p className="hint">{t('evidence.observedHint')}</p>
+      {live.length === 0 && <p className="hint">—</p>}
+      <ul className="plain">
+        {live.map((f) => <li key={f.kind}>{f.observed}</li>)}
+      </ul>
+
+      {live.some((f) => f.limits.length > 0) && (
+        <>
+          <h3>{t('evidence.limits')}</h3>
+          <ul className="plain">
+            {live.flatMap((f) => f.limits).map((line) => <li key={line}>{line}</li>)}
+          </ul>
+        </>
+      )}
+
+      <h3>{t('evidence.cannot')}</h3>
+      <p className="hint">{t('evidence.cannotHint')}</p>
+      <div className="limitations">
+        <ul className="plain">
+          {report.cannot_be_determined_from_a_photograph.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      </div>
+
+      <h3>{t('evidence.means')}</h3>
+      <p className="hint">
+        <strong>{t('evidence.ceiling')}: </strong>
+        {report.ceiling.replace('_', ' ')} — {report.ceiling_meaning}
+      </p>
+      {report.notes.map((line) => <p className="hint" key={line}>{line}</p>)}
+      <p className="caveat">{report.parameter_status}</p>
+    </section>
   )
 }
 
@@ -363,6 +463,9 @@ export function ResultView({ analysis, caseId }: { analysis: Analysis; caseId: s
   return (
     <div>
       <TriageCard analysis={analysis} />
+      {/* Directly under the grade: what the grade is made of, and what it is
+          not. Placing it lower would let the coloured card be read alone. */}
+      <EvidencePanel analysis={analysis} />
       <NextStep analysis={analysis} />
       <OverlayImage analysis={analysis} />
       <LesionList analysis={analysis} />

@@ -345,6 +345,24 @@ const en: Dict = {
     'One or two questions chosen from what this image actually showed. Each names what its answer would settle — the point is an experiment with a result, not advice.',
   'clarify.settles': 'What the answer settles',
 
+  'evidence.title': 'What the photograph shows, and what it cannot',
+  'evidence.observed': 'Observed in the image',
+  'evidence.observedHint':
+    'A description of pixels. None of these is a diagnosis, and none names a disease.',
+  'evidence.cannot': 'Not determinable from a photograph',
+  'evidence.cannotHint':
+    'These require hands, instruments or imaging. Nothing below was assessed, and no result on this page implies otherwise.',
+  'evidence.means': 'What this result means',
+  'evidence.ceiling': 'Most urgent grade the visual evidence supports',
+  'evidence.capped':
+    'The measured areas crossed a higher threshold, but the visual evidence did not support it. The grade shown was lowered to what the evidence carries — the reasons are listed in the rationale below.',
+  'evidence.limits': 'Why the evidence does not carry more',
+  'evidence.appearance.no_significant_visual_abnormality': 'No significant visual abnormality detected',
+  'evidence.appearance.potentially_abnormal_appearance': 'Potentially abnormal appearance',
+  'evidence.appearance.insufficient_image_quality': 'Insufficient image quality for reliable visual assessment',
+  'evidence.params':
+    'Configurable research parameters — not clinically validated thresholds',
+
   'feedback.title': 'Was this right?',
   'feedback.intro':
     'Every real defect this platform has had was found by someone looking at a real photograph — never by its tests. If it got this wrong, saying so here is the most useful thing you can do with it.',
@@ -358,8 +376,14 @@ const en: Dict = {
   'feedback.previous': 'Previously recorded',
 
   'result.triage': 'Triage',
-  'result.confidence': 'Confidence',
-  'result.distance': 'Distance from threshold',
+  // NOT "Confidence". The number is an uncalibrated distance-from-boundary
+  // heuristic, not a probability — there is no clinical calibration behind it,
+  // and "confidence 55%" reads as "55% sure", which is a claim this platform
+  // cannot make. See app/analysis/evidence.py and _conf() in classical.py.
+  'result.confidence': 'Evidence strength (uncalibrated)',
+  'result.distance': 'Evidence strength (uncalibrated)',
+  'result.evidenceStrengthHint':
+    'A heuristic score, not a probability. It reflects how far the measurement sits from a decision threshold, discounted by image quality — it is NOT calibrated against clinical outcomes and must not be read as a percentage chance of anything.',
   'result.noFlagMeaning':
     'No surface feature was detected — that is all this means. It is not a measure of how healthy the foot is, and it does not exclude ischaemia, neuropathy, infection or anything beneath the skin.',
   'result.nextStep': 'Recommended next step',
@@ -412,7 +436,7 @@ const en: Dict = {
   'fairness.title': 'Fairness (placeholder)',
   'fairness.group': 'Monk Skin Tone group',
   'fairness.analyses': 'Analyses',
-  'fairness.meanConfidence': 'Mean reported confidence',
+  'fairness.meanConfidence': 'Mean evidence strength (uncalibrated)',
   'fairness.qualityPass': 'Quality pass rate',
   'fairness.coverage': 'Skin tone recorded for',
   'fairness.ofAnalyses': 'of analyses',
@@ -763,6 +787,24 @@ const ar: Dict = {
     'سؤال أو سؤالان مُختاران مما أظهرته هذه الصورة فعلاً. كل منهما يذكر ما ستحسمه إجابته — المقصود تجربة لها نتيجة، لا نصيحة.',
   'clarify.settles': 'ما تحسمه الإجابة',
 
+  'evidence.title': 'ما تُظهره الصورة، وما لا تستطيع إظهاره',
+  'evidence.observed': 'ما لوحظ في الصورة',
+  'evidence.observedHint':
+    'وصف لوحدات الصورة. لا شيء من هذا تشخيص، ولا يسمّي أيٌّ منه مرضاً.',
+  'evidence.cannot': 'لا يمكن تحديده من صورة',
+  'evidence.cannotHint':
+    'هذه تتطلب اليدين أو أدوات أو تصويراً طبياً. لم يُقيَّم أيٌّ مما يلي، ولا تعني أي نتيجة في هذه الصفحة خلاف ذلك.',
+  'evidence.means': 'ماذا تعني هذه النتيجة',
+  'evidence.ceiling': 'أعلى درجة استعجال تدعمها الأدلة البصرية',
+  'evidence.capped':
+    'تجاوزت المساحات المقيسة عتبة أعلى، لكن الأدلة البصرية لم تدعمها. خُفّضت الدرجة المعروضة إلى ما تحمله الأدلة — والأسباب مذكورة في المسوّغات أدناه.',
+  'evidence.limits': 'لماذا لا تحمل الأدلة أكثر من ذلك',
+  'evidence.appearance.no_significant_visual_abnormality': 'لم يُكتشف شذوذ بصري ذو دلالة',
+  'evidence.appearance.potentially_abnormal_appearance': 'مظهر قد يكون غير طبيعي',
+  'evidence.appearance.insufficient_image_quality': 'جودة الصورة غير كافية لتقييم بصري موثوق',
+  'evidence.params':
+    'معاملات بحثية قابلة للضبط — وليست عتبات سريرية مُتحقَّقاً منها',
+
   'feedback.title': 'هل كان هذا صحيحاً؟',
   'feedback.intro':
     'كل خلل حقيقي في هذه المنصة اكتشفه شخص ينظر إلى صورة حقيقية — لا اختباراتها. إن أخطأت هنا، فإن قولك ذلك هو أنفع ما يمكن فعله بها.',
@@ -775,8 +817,11 @@ const ar: Dict = {
   'feedback.previous': 'مسجَّل سابقاً',
 
   'result.triage': 'الفرز',
-  'result.confidence': 'مستوى الثقة',
-  'result.distance': 'المسافة من العتبة',
+  // ليست «ثقة». الرقم مؤشّر استدلالي غير معاير للمسافة عن العتبة، وليس احتمالاً.
+  'result.confidence': 'قوة الدليل (غير معايَرة)',
+  'result.distance': 'قوة الدليل (غير معايَرة)',
+  'result.evidenceStrengthHint':
+    'مؤشّر استدلالي، لا احتمال. يعكس بُعد القياس عن عتبة القرار مخصوماً بجودة الصورة — وهو غير معاير مقابل النتائج السريرية، ولا يجوز قراءته كنسبة احتمال لأي شيء.',
   'result.noFlagMeaning':
     'لم تُكتشف أي سمة سطحية — هذا كل ما يعنيه الأمر. ليس قياساً لسلامة القدم، ولا يستبعد نقص التروية أو الاعتلال العصبي أو العدوى أو أي شيء تحت الجلد.',
   'result.nextStep': 'الخطوة التالية الموصى بها',
@@ -829,7 +874,7 @@ const ar: Dict = {
   'fairness.title': 'الإنصاف (نموذج أولي)',
   'fairness.group': 'فئة مقياس مونك للون البشرة',
   'fairness.analyses': 'التحاليل',
-  'fairness.meanConfidence': 'متوسط الثقة المُبلَّغ عنها',
+  'fairness.meanConfidence': 'متوسط قوة الدليل (غير معايَرة)',
   'fairness.qualityPass': 'نسبة اجتياز الجودة',
   'fairness.coverage': 'سُجِّل لون البشرة لـ',
   'fairness.ofAnalyses': 'من التحاليل',

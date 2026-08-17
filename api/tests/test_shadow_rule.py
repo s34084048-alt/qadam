@@ -211,11 +211,7 @@ def test_moist_tissue_in_a_defect_reads_as_slough(seed):
     assert _yellow("slough", seed=seed)["verdict"] == "slough_like"
 
 
-def test_callus_never_lowers_a_grade():
-    """THE ASYMMETRY. A shadow verdict lowers the grade because a shadow is
-    nothing. A callus verdict must not, because an ulcer very often lies under
-    callus and is invisible until it is pared back — suppressing here would
-    hide the wound this module exists to find."""
+def _callus_case():
     W, H = 1200, 900
     rng = np.random.default_rng(4)
     img = np.full((H, W, 3), (150, 95, 45), np.uint8)
@@ -234,13 +230,74 @@ def test_callus_never_lowers_a_grade():
                               render_overlay=False))
     assert out.result is not None
     assert out.result.features["yellow_area_character"]["verdict"] == "callus_like"
-    # The grade is untouched, and there is no re-image suppression from it.
-    assert out.result.triage.grade is Grade.URGENT
-    assert out.result.features["re_image_required"] is None
+    return out.result
 
-    # What it DOES do is ask the question only a person can answer.
-    asks = " ".join(q["ask"] for q in out.result.features["clarifying_questions"])
+
+def test_callus_never_hides_the_finding():
+    """THE ASYMMETRY, and the property that actually matters.
+
+    A shadow verdict lowers the grade because a shadow is nothing. A callus
+    verdict must never SUPPRESS, because an ulcer very often lies under callus
+    and is invisible until it is pared back — silence here would hide the wound
+    this module exists to find.
+
+    This test previously asserted the grade stayed URGENT. That was a proxy for
+    the property, and the proxy was wrong: reaching URGENT on a photograph of
+    dry keratin is itself the false positive this platform shipped, at 0.85
+    confidence — the highest figure the model can express, on a foot with no
+    wound at all.
+
+    What "does not hide it" actually requires is asserted below, and it is
+    STRICTER than the old assertion in the direction that protects the patient:
+    the finding survives, the grade stays at a level that puts a person in
+    front of the foot, nothing is suppressed, and the one question that settles
+    it is still asked.
+    """
+    result = _callus_case()
+
+    # Not suppressed. REVIEW routes to podiatry within a week, which IS the
+    # action that finds an ulcer under callus — a person looks and pares it.
+    assert result.triage.grade.rank >= Grade.REVIEW.rank
+    assert result.features["re_image_required"] is None
+
+    # Not urgent, and the reason is stated rather than silently applied.
+    assert result.triage.grade is Grade.REVIEW
+    assert result.features["grade_capped_by_evidence"] is True
+    rationale = " ".join(result.triage.rationale)
+    assert "NOT REASSURANCE" in rationale
+    assert "ulcer frequently lies underneath callus" in rationale
+
+    # And the question only a person can answer is still asked.
+    asks = " ".join(q["ask"] for q in result.features["clarifying_questions"])
     assert "skin actually broken" in asks
+
+
+def test_the_callus_cap_is_specific_to_callus():
+    """The cap must not generalise to "yellow areas are not urgent". The thing
+    callus can be masking — an open wound bed — must still reach urgent, or the
+    fix has simply moved the failure somewhere quieter."""
+    W, H = 1200, 900
+    rng = np.random.default_rng(9)
+    img = np.full((H, W, 3), (150, 95, 45), np.uint8)
+    cv2.ellipse(img, (600, 450), (280, 340), 0, 0, 360, LIGHT, -1)
+    region = np.zeros((H, W), np.uint8)
+    cv2.circle(region, (600, 430), 95, 255, -1)
+    wet = np.full_like(img, (110, 195, 220))
+    wet = np.clip(wet + rng.normal(0, 10, wet.shape), 0, 255).astype(np.uint8)
+    img[region > 0] = wet[region > 0]
+    for _ in range(30):
+        cx = int(rng.integers(540, 660)); cy = int(rng.integers(370, 490))
+        cv2.circle(img, (cx, cy), int(rng.integers(3, 7)), (245, 250, 252), -1)
+    img = np.clip(img + rng.normal(0, 4, img.shape), 0, 255).astype(np.uint8)
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 93])
+    assert ok
+
+    out = execute(AnalysisJob(image_bytes=buf.tobytes(), module="foot",
+                              render_overlay=False))
+    assert out.result is not None
+    assert out.result.features["yellow_area_character"]["verdict"] == "slough_like"
+    assert out.result.triage.grade is Grade.URGENT
+    assert out.result.features["grade_capped_by_evidence"] is False
 
 
 def test_the_callus_verdict_says_it_is_not_reassurance():

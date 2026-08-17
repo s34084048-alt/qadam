@@ -49,6 +49,17 @@ GROUND_TRUTH = {
 }
 
 
+def _stored_features(analysis) -> dict:
+    """The features exactly as they were persisted with this analysis.
+
+    Deliberately NOT recomputed. The point of the column is what the clinician
+    was actually shown; re-running today's code against yesterday's image would
+    record the wrong thing and quietly destroy the only evidence that the
+    behaviour ever changed.
+    """
+    return (analysis.rationale_json or {}).get("features", {}) or {}
+
+
 def _out(row: AnalysisFeedback) -> FeedbackOut:
     return FeedbackOut(
         id=row.id,
@@ -56,6 +67,8 @@ def _out(row: AnalysisFeedback) -> FeedbackOut:
         analysis_id=row.analysis_id,
         reported_grade=row.reported_grade,
         model_version=row.model_version,
+        evidence_ceiling=row.evidence_ceiling,
+        grade_capped=row.grade_capped,
         verdict=row.verdict,
         verdict_label=VERDICTS.get(row.verdict, row.verdict),
         ground_truth=row.ground_truth,
@@ -123,6 +136,11 @@ async def add_feedback(
         # re-analysis or a threshold change.
         reported_grade=analysis.triage_grade,
         model_version=analysis.model_version,
+        # What the evidence layer allowed, beside what the areas said. Read
+        # from the stored analysis so it is the ceiling that was actually in
+        # force when the clinician looked, not whatever the code does today.
+        evidence_ceiling=_stored_features(analysis).get("evidence", {}).get("ceiling"),
+        grade_capped=_stored_features(analysis).get("grade_capped_by_evidence"),
         verdict=body.verdict,
         ground_truth=body.ground_truth,
         note=(body.note or "").strip() or None,
@@ -164,6 +182,11 @@ async def feedback_summary(
 
     by_verdict: dict[str, int] = {}
     matrix: dict[str, dict[str, int]] = {}
+    # The question the evidence layer created: when it lowered a grade, was it
+    # right to? Split so a "too_low" report can be attributed to the cap rather
+    # than to the thresholds.
+    capped: dict[str, int] = {"capped": 0, "not_capped": 0, "unrecorded": 0}
+    missed_after_cap = 0
     for row in rows:
         by_verdict[row.verdict] = by_verdict.get(row.verdict, 0) + 1
         truth = row.ground_truth or "unrecorded"
@@ -171,12 +194,33 @@ async def feedback_summary(
         matrix[row.reported_grade][truth] = (
             matrix[row.reported_grade].get(truth, 0) + 1
         )
+        key = ("unrecorded" if row.grade_capped is None
+               else "capped" if row.grade_capped else "not_capped")
+        capped[key] += 1
+        if row.grade_capped and row.verdict == "too_low":
+            missed_after_cap += 1
 
     total = len(rows)
     return {
         "total": total,
         "by_verdict": by_verdict,
         "reported_grade_vs_ground_truth": matrix,
+        "evidence_cap": {
+            "counts": capped,
+            "too_low_on_a_capped_grade": missed_after_cap,
+            "why_this_split_exists": (
+                "The evidence layer can lower a grade the measured areas alone "
+                "would have raised. That closed a reproduced false positive, "
+                "and the risk of any such change is that it opens a false "
+                "negative. 'too_low' on a CAPPED grade is a report that the cap "
+                "was wrong; 'too_low' on an uncapped one is a report about the "
+                "thresholds. They need different fixes."
+            ),
+            "not_a_rate": (
+                "A count, not a rate. The denominator is whoever chose to leave "
+                "feedback, which is not a sample of anything."
+            ),
+        },
         "verdicts": VERDICTS,
         "ground_truth_options": GROUND_TRUTH,
         "what_this_is_not": (

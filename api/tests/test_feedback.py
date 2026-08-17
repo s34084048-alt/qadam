@@ -186,3 +186,69 @@ async def test_the_summary_refuses_to_call_itself_a_validation_study(
 async def test_a_clinician_cannot_read_the_summary(client, auth):
     assert (await client.get(f"{API}/admin/feedback",
                              headers=auth)).status_code == 403
+
+
+# --- the evidence ceiling, recorded beside the verdict ------------------------
+#
+# Added with the evidence layer. Without these columns a "too_low" report
+# cannot be attributed: it may mean the cap was wrong, or that the threshold
+# was. Those need different fixes and arrive as identical rows otherwise.
+
+async def test_feedback_records_the_ceiling_that_was_in_force(
+    client, auth, ref_factory
+):
+    case_id, analysis_id, _grade = await _analysed(client, auth, ref_factory)
+
+    detail = (await client.get(f"{API}/cases/{case_id}", headers=auth)).json()
+    features = detail["latest_analysis"]["features"]
+    assert "evidence" in features, "the analysis did not carry an evidence report"
+
+    resp = await client.post(
+        f"{API}/cases/{case_id}/feedback", headers=auth,
+        json={"analysis_id": analysis_id, "verdict": "too_high",
+              "ground_truth": "callus"},
+    )
+    assert resp.status_code == 201, resp.text
+    row = resp.json()
+
+    # Copied from what the clinician was actually shown, not recomputed.
+    assert row["evidence_ceiling"] == features["evidence"]["ceiling"]
+    assert row["grade_capped"] == features["grade_capped_by_evidence"]
+
+
+async def test_the_admin_summary_separates_a_bad_cap_from_a_bad_threshold(
+    client, auth, admin_auth, ref_factory
+):
+    case_id, analysis_id, _grade = await _analysed(client, auth, ref_factory)
+    await client.post(
+        f"{API}/cases/{case_id}/feedback", headers=auth,
+        json={"analysis_id": analysis_id, "verdict": "too_low",
+              "ground_truth": "open_ulcer"},
+    )
+
+    summary = (await client.get(f"{API}/admin/feedback", headers=admin_auth)).json()
+    cap = summary["evidence_cap"]
+    assert sum(cap["counts"].values()) == summary["total"]
+    assert "too_low_on_a_capped_grade" in cap
+    # And it must not be dressed up as a performance figure.
+    assert "not a rate" in cap["not_a_rate"].lower()
+
+
+async def test_the_ceiling_columns_do_not_move_the_grade_either(
+    client, auth, ref_factory
+):
+    """The central negative property, extended to the new columns."""
+    case_id, analysis_id, grade = await _analysed(client, auth, ref_factory)
+    before = (await client.get(f"{API}/cases/{case_id}", headers=auth)).json()
+
+    await client.post(
+        f"{API}/cases/{case_id}/feedback", headers=auth,
+        json={"analysis_id": analysis_id, "verdict": "too_low",
+              "ground_truth": "open_ulcer", "note": "much worse than reported"},
+    )
+
+    after = (await client.get(f"{API}/cases/{case_id}", headers=auth)).json()
+    assert after["latest_analysis"]["triage"]["grade"] == grade
+    assert (after["latest_analysis"]["features"]["evidence"]["ceiling"]
+            == before["latest_analysis"]["features"]["evidence"]["ceiling"])
+    assert after["routing"] == before["routing"]

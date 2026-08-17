@@ -830,3 +830,36 @@ button.danger:disabled { opacity: .45; }
 /* "Was this right?" — the validation dataset. Given weight because it is the
    only thing on the page that improves the platform. */
 .feedback { border: 2px dashed var(--brand); }
+
+/* --- observation vs interpretation ----------------------------------------- */
+/* The evidence panel separates "what the pixels show" from "what it means".
+   Styled quietly on purpose: it must read as an explanation of the grade
+   above it, not as a second, competing verdict. */
+
+.evidence { border-inline-start: 4px solid var(--muted); }
+.evidence h3 {
+  font-size: .82rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin: 1rem 0 .3rem;
+}
+.evidence .appearance {
+  padding: .6rem .75rem;
+  border-radius: 6px;
+  background: #f4f6f8;
+  border-inline-start: 3px solid var(--muted);
+}
+/* Only the unreadable state is coloured. "Potentially abnormal" must not read
+   as an alarm — the grade above already carries the urgency, and a second
+   coloured block invites the reader to add them together. */
+.evidence .appearance.insufficient_image_quality {
+  background: #fdf5e6;
+  border-inline-start-color: var(--grade-review);
+}
+.evidence .appearance strong { display: block; margin-bottom: .25rem; }
+
+/* The evidence-strength number is a heuristic, not a probability. Its
+   disclaimer is shown quietly beside it, muted, so the number is never read
+   alone as "55% sure". See i18n result.evidenceStrengthHint. */
+.evidence-strength-hint { opacity: .82; line-height: 1.4; margin-top: .35rem; }

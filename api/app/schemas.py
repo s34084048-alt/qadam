@@ -261,6 +261,12 @@ class FeedbackOut(BaseModel):
     analysis_id: uuid.UUID
     reported_grade: Grade
     model_version: str
+    # NULL on rows written before the evidence layer existed. Nullable rather
+    # than defaulted: "nothing was capped because nothing could be" and "the
+    # grade was not capped" are different facts, and a default would erase the
+    # difference.
+    evidence_ceiling: Grade | None = None
+    grade_capped: bool | None = None
     verdict: str
     verdict_label: str
     ground_truth: str | None

@@ -319,6 +319,21 @@ class AnalysisFeedback(Base):
     # still means something after a re-analysis or a threshold change.
     reported_grade: Mapped[str] = mapped_column(String(16), index=True)
     model_version: Mapped[str] = mapped_column(String(64))
+    # Whether the evidence layer LOWERED the grade the areas alone would have
+    # produced, and the ceiling it lowered to. Copied for the same reason as
+    # the grade.
+    #
+    # This is what makes the disagreement diagnosable rather than merely
+    # counted. "too_low" on a case that was capped is a report that the cap was
+    # wrong — a specific, testable claim about evidence.py. "too_low" on a case
+    # that was never capped is a report about the thresholds instead. Without
+    # this column both arrive as the same row and the most important question
+    # about the false-positive work — did closing it open a false negative? —
+    # cannot be asked of the data at all.
+    evidence_ceiling: Mapped[str | None] = mapped_column(String(16), nullable=True,
+                                                         index=True)
+    grade_capped: Mapped[bool | None] = mapped_column(Boolean, nullable=True,
+                                                      index=True)
     # agree | too_high | too_low | unusable_image
     verdict: Mapped[str] = mapped_column(String(24), index=True)
     # intact_skin | callus | open_ulcer | eschar | other | not_sure
