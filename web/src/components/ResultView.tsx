@@ -49,9 +49,10 @@ export function TriageCard({ analysis }: { analysis: Analysis }) {
         {t('result.model')}: {analysis.model_version}
       </div>
       {triage.grade !== 'no_flag' && (
-        <div className="meta evidence-strength-hint">
+        <details className="meta evidence-strength-hint">
+          <summary>{t('result.aboutScore')}</summary>
           {t('result.evidenceStrengthHint')}
-        </div>
+        </details>
       )}
       {triage.grade === 'no_flag' && (
         <div className="meta no-flag-meaning">{t('result.noFlagMeaning')}</div>
@@ -221,14 +222,24 @@ export function LesionList({ analysis }: { analysis: Analysis }) {
             </tr>
           </thead>
           <tbody>
-            {analysis.lesions.map((lesion) => (
-              <tr key={lesion.id}>
-                <td>{lesion.kind.replace(/_/g, ' ')}</td>
-                <td>{lesion.area_pct.toFixed(1)}%</td>
-                <td>{lesion.severity.toFixed(2)}</td>
-                <td className="hint">{lesion.description}</td>
-              </tr>
-            ))}
+            {(() => {
+              // The same long description repeated on every row of a kind is
+              // noise. Show it once — on the first row of each kind — and leave
+              // the rest of that kind's rows to the numbers.
+              const describedKinds = new Set<string>()
+              return analysis.lesions.map((lesion) => {
+                const firstOfKind = !describedKinds.has(lesion.kind)
+                describedKinds.add(lesion.kind)
+                return (
+                  <tr key={lesion.id}>
+                    <td>{lesion.kind.replace(/_/g, ' ')}</td>
+                    <td>{lesion.area_pct.toFixed(1)}%</td>
+                    <td>{lesion.severity.toFixed(2)}</td>
+                    <td className="hint">{firstOfKind ? lesion.description : ''}</td>
+                  </tr>
+                )
+              })
+            })()}
           </tbody>
         </table>
       </div>
@@ -260,21 +271,8 @@ export function ClinicalPanel({ analysis }: { analysis: Analysis }) {
         </div>
       )}
 
-      <h3>{t('clinical.considerations')}</h3>
-      {clinical.considerations.map((item) => (
-        <div className="consideration" key={item.pattern}>
-          <p><strong>{item.pattern}</strong></p>
-          <p className="hint">{t('clinical.overlapsWith')}</p>
-          <ul className="plain">
-            {item.overlaps_with.map((option) => <li key={option}>{option}</li>)}
-          </ul>
-          <p className="discriminator">
-            <strong>{t('clinical.distinguishedBy')}: </strong>
-            {item.distinguished_by}
-          </p>
-        </div>
-      ))}
-
+      {/* Protective steps stay visible: they are the one thing here a reader
+          should act on now, while the referral is arranged. */}
       {clinical.immediate_actions.length > 0 && (
         <>
           <h3>{t('clinical.immediateActions')}</h3>
@@ -285,26 +283,43 @@ export function ClinicalPanel({ analysis }: { analysis: Analysis }) {
         </>
       )}
 
-      {clinical.ask_and_check.length > 0 && (
-        <>
-          <h3>{t('clinical.askAndCheck')}</h3>
-          <p className="hint">{t('clinical.askAndCheckNote')}</p>
-          <ul className="plain">
-            {clinical.ask_and_check.map((a) => <li key={a}>{a}</li>)}
-          </ul>
-        </>
-      )}
-
-      {clinical.not_assessable.length > 0 && (
-        <>
-          <h3>{t('clinical.notAssessable')}</h3>
-          <div className="limitations">
-            <ul className="plain">
-              {clinical.not_assessable.map((a) => <li key={a}>{a}</li>)}
-            </ul>
-          </div>
-        </>
-      )}
+      {/* The long reference material — differentials, what to ask and examine —
+          is collapsed by default. Nothing is removed; it is one tap away. The
+          "not assessable" list is dropped here because the evidence panel above
+          already carries the authoritative "not determinable from a photograph"
+          block, and repeating it three times on one page buries it. */}
+      {clinical.considerations.length > 0 || clinical.ask_and_check.length > 0 ? (
+        <details className="clinical-detail">
+          <summary>{t('clinical.moreDetail')}</summary>
+          {clinical.considerations.length > 0 && (
+            <>
+              <h3>{t('clinical.considerations')}</h3>
+              {clinical.considerations.map((item) => (
+                <div className="consideration" key={item.pattern}>
+                  <p><strong>{item.pattern}</strong></p>
+                  <p className="hint">{t('clinical.overlapsWith')}</p>
+                  <ul className="plain">
+                    {item.overlaps_with.map((option) => <li key={option}>{option}</li>)}
+                  </ul>
+                  <p className="discriminator">
+                    <strong>{t('clinical.distinguishedBy')}: </strong>
+                    {item.distinguished_by}
+                  </p>
+                </div>
+              ))}
+            </>
+          )}
+          {clinical.ask_and_check.length > 0 && (
+            <>
+              <h3>{t('clinical.askAndCheck')}</h3>
+              <p className="hint">{t('clinical.askAndCheckNote')}</p>
+              <ul className="plain">
+                {clinical.ask_and_check.map((a) => <li key={a}>{a}</li>)}
+              </ul>
+            </>
+          )}
+        </details>
+      ) : null}
 
       {Object.entries(clinical.scales).map(([name, body]) => (
         <details key={name} className="scale-block">
@@ -391,18 +406,26 @@ export function Limitations({ analysis }: { analysis: Analysis }) {
   return (
     <section className="card">
       <h2>{t('result.limitations')}</h2>
-      <div className="limitations">
-        <ul className="plain">
-          {(safety.module_limitations ?? []).map((line) => <li key={line}>{line}</li>)}
-        </ul>
-      </div>
+      {/* The device notice, disclaimer and human-in-the-loop line stay visible
+          — they are the required safety statement and are never collapsed. */}
       {safety.no_flag_caveat && (
         <div className="caveat" role="alert">{safety.no_flag_caveat}</div>
       )}
-      <p className="hint" style={{ marginTop: '.7rem' }}>
+      <p className="hint">
         <strong>{safety.device_notice}</strong> {safety.disclaimer}{' '}
         {safety.human_in_the_loop} {safety.no_treatment}
       </p>
+      {/* The detailed per-item list repeats the evidence panel's "not
+          determinable" block, so it is collapsed rather than shown a third
+          time. Kept, not removed. */}
+      {(safety.module_limitations ?? []).length > 0 && (
+        <details className="limitations" style={{ marginTop: '.7rem' }}>
+          <summary>{t('result.moreLimits')}</summary>
+          <ul className="plain">
+            {(safety.module_limitations ?? []).map((line) => <li key={line}>{line}</li>)}
+          </ul>
+        </details>
+      )}
     </section>
   )
 }

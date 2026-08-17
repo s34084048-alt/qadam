@@ -863,3 +863,16 @@ button.danger:disabled { opacity: .45; }
    disclaimer is shown quietly beside it, muted, so the number is never read
    alone as "55% sure". See i18n result.evidenceStrengthHint. */
 .evidence-strength-hint { opacity: .82; line-height: 1.4; margin-top: .35rem; }
+
+/* Collapsed detail toggles on the result page — long reference material is one
+   tap away rather than a wall of text. Nothing is removed, only folded. */
+details.clinical-detail > summary,
+details.evidence-strength-hint > summary,
+section .limitations > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: .3rem 0;
+  list-style: revert;
+}
+details.clinical-detail[open] > summary { margin-bottom: .4rem; }
+details.evidence-strength-hint > summary { opacity: .9; font-weight: 500; }

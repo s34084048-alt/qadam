@@ -363,6 +363,12 @@ const en: Dict = {
   'evidence.params':
     'Configurable research parameters — not clinically validated thresholds',
 
+  // Collapsible summaries — used to hide long detail behind a toggle rather
+  // than remove it. The detail is one tap away; nothing is deleted.
+  'result.aboutScore': 'About this score',
+  'clinical.moreDetail': 'Clinical detail — differentials, what to ask and examine',
+  'result.moreLimits': 'More on what a photograph cannot assess',
+
   'feedback.title': 'Was this right?',
   'feedback.intro':
     'Every real defect this platform has had was found by someone looking at a real photograph — never by its tests. If it got this wrong, saying so here is the most useful thing you can do with it.',
@@ -804,6 +810,10 @@ const ar: Dict = {
   'evidence.appearance.insufficient_image_quality': 'جودة الصورة غير كافية لتقييم بصري موثوق',
   'evidence.params':
     'معاملات بحثية قابلة للضبط — وليست عتبات سريرية مُتحقَّقاً منها',
+
+  'result.aboutScore': 'حول هذه الدرجة',
+  'clinical.moreDetail': 'تفاصيل سريرية — التشخيصات التفريقية، وما يُسأل ويُفحص',
+  'result.moreLimits': 'المزيد عمّا لا تستطيع الصورة تقييمه',
 
   'feedback.title': 'هل كان هذا صحيحاً؟',
   'feedback.intro':
