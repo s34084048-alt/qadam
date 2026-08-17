@@ -15,7 +15,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from .. import cv_utils, evidence, localization
+from .. import cv_utils, evidence, localization, segmentation
 from ..modules_config import routing_for
 from ..types import (Grade, Lesion, ModuleResult, QualityReport,
                      SubjectMismatch, Triage)
@@ -45,6 +45,29 @@ T = {
         "monitor_erythema_pct": 4.0,
     },
 }
+
+
+def _localization_from(seg) -> localization.WoundLocalization:
+    """A minimal WoundLocalization view of a provider result that did not carry
+    the heuristic's rich detail — e.g. a future real segmentation model. Keeps
+    the overlay and the `wound_localization` payload working for ANY provider,
+    without inventing contributing-evidence or artifact prose the model did not
+    produce."""
+    return localization.WoundLocalization(
+        present=seg.present,
+        classification=seg.classification,
+        box=seg.bounding_box,
+        area_pct=seg.area_pct,
+        boundary_confidence=seg.segmentation_score,
+        components=0,
+        contributing=[],
+        artifacts=[],
+        message=(localization.WOUND_MESSAGE
+                 if seg.classification == localization.CONFIRMED
+                 else localization.UNCERTAIN_MESSAGE
+                 if seg.present else ""),
+        mask=seg.mask,
+    )
 
 
 def _conf(evidence: float, quality: QualityReport) -> float:
@@ -431,19 +454,30 @@ class ClassicalCVBackend:
         yellow_character = (cv_utils.yellow_region_character(bgr, slough)
                             if brk_pct > 0 else None)
 
-        # WOUND LOCALIZATION. A single boundary drawn only where there is
-        # evidence of tissue disruption — reusing the character verdicts above,
-        # so a shadow or callus never becomes a wound box. It changes no grade;
-        # see localization.py.
-        wound = localization.localize(
-            dark_mask=dark,
-            dark_verdict=(character or {}).get("verdict"),
-            slough_mask=slough,
-            slough_verdict=(yellow_character or {}).get("verdict"),
-            erythema_mask=erythema,
-            subject_mask=mask,
-            quality_factor=quality.confidence_factor,
+        # WOUND SEGMENTATION, through the model-agnostic provider interface.
+        # Today the provider IS the heuristic localiser (unchanged); a future
+        # validated model implements the same interface and drops in here with
+        # no change to the safety pipeline. The result carries a region and its
+        # provenance ONLY — it holds no grade and no diagnosis, and the grade
+        # below is set entirely independently of it. See segmentation.py.
+        seg = segmentation.active_provider().segment(
+            segmentation.SegmentationInput(
+                image_bgr=bgr,
+                subject_mask=mask,
+                quality_factor=quality.confidence_factor,
+                classical_features={
+                    "dark_mask": dark,
+                    "dark_verdict": (character or {}).get("verdict"),
+                    "slough_mask": slough,
+                    "slough_verdict": (yellow_character or {}).get("verdict"),
+                    "erythema_mask": erythema,
+                },
+            )
         )
+        # `detail` is the heuristic's rich WoundLocalization when the heuristic
+        # provider produced it; a real provider may not, so fall back to a
+        # minimal view built from the interface result.
+        wound = seg.detail if seg.detail is not None else _localization_from(seg)
 
         lesions = (
             # NOT called necrotic tissue. A photograph cannot separate eschar
@@ -600,7 +634,13 @@ class ClassicalCVBackend:
                 "evidence": report.to_json(),
                 "grade_capped_by_evidence": capped,
                 # Where the wound is, drawn only where tissue is disrupted.
+                # Provider-specific rich view (heuristic detail), used by the
+                # overlay and kept for backward compatibility.
                 "wound_localization": wound.to_json(),
+                # The model-agnostic interface + provenance view. Identical
+                # shape whichever provider produced it, so a validated model
+                # reports here without any consumer changing. Visible to admin.
+                "wound_segmentation": seg.provenance(),
                 "re_image_required": ({
                     "reason": "The darkness reads as cast light, and there is "
                               "no tissue loss in the frame to make it an "

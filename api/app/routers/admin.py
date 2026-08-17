@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query
 from sqlalchemy import func, select
 
 from .. import audit
+from ..analysis import segmentation
 from ..analysis.modules_config import MODULES
 from ..deps import AdminUser, SessionDep
 from ..errors import ApiError, not_found
@@ -105,9 +106,26 @@ async def fairness_dashboard(
     recorded = sum(s["analyses"] for s in strata if s["group"] != "not recorded")
     total = sum(s["analyses"] for s in strata)
 
+    _provider = segmentation.active_provider()
     return {
         "status": "placeholder",
         "strata": strata,
+        # Which wound-segmentation provider is in force platform-wide, and
+        # whether its score may be read as a probability. Surfaced here so an
+        # administrator sees the provenance without opening an analysis.
+        "segmentation_provider": {
+            "method": _provider.method,
+            "model_version": _provider.model_version,
+            "is_calibrated": _provider.is_calibrated,
+            "calibration_status": getattr(_provider, "calibration_status",
+                                          "unknown"),
+            "dataset_version": getattr(_provider, "dataset_version", None),
+            "note": (
+                "The active provider produces a region and a score only. The "
+                "grade never comes from it. An uncalibrated score is not a "
+                "probability."
+            ),
+        },
         "coverage": {
             "analyses_total": total,
             "skin_tone_recorded": recorded,
