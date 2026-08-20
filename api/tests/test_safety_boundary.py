@@ -207,14 +207,23 @@ async def test_immediate_actions_are_protective_never_treatment(
         _assert_no_forbidden_claims(action, "immediate action")
 
 
-async def test_severity_index_is_labelled_as_surface_only(
+async def test_no_severity_index_is_produced_from_a_foot_image(
     client, auth, ref_factory
 ):
+    """An image of a foot yields no severity index at all.
+
+    This test used to assert the Surface burden index was *labelled* as
+    surface-only — that its value was in 0..100 and its caveat said "not a
+    wound grade". Both held while the number itself was meaningless: the
+    formula (nec*12 + brk*6 + ery*1.2, capped at 100) saturated at 8.3% dark
+    pixels, so a healthy foot on a light background scored 100% and the same
+    lesion image scored 80.8% and then 89.2% on separate runs. A caveat is not
+    a substitute for a number that means something, and no assertion about the
+    wording could have caught that.
+    """
     sample = next(s for s in SAMPLES if s.name == "foot_urgent")
     _case_id, body = await _analyze(client, auth, ref_factory, sample)
-    index = body["clinical"]["severity_index"]
-    assert 0.0 <= index["value"] <= 100.0
-    assert "not a wound grade" in index["caveat"].lower()
+    assert body["clinical"]["severity_index"] is None
 
     # Published depth-based grades must not be fabricated from a photograph.
     scales = body["clinical"]["scales"]
@@ -222,6 +231,42 @@ async def test_severity_index_is_labelled_as_surface_only(
     assert "no wagner grade is produced" in scales["Wagner"]["note"].lower()
     assert "no sinbad score is produced" in scales["SINBAD"]["note"].lower()
     assert len(scales["SINBAD"]["requires_clinical_examination"]) >= 4
+
+
+@pytest.mark.parametrize("sample", [s for s in ANALYSABLE if s.module == "foot"])
+async def test_burden_index_is_absent_from_every_foot_payload(
+    client, auth, ref_factory, sample
+):
+    """Gone for every foot image, not just the one that motivated removing it.
+
+    Asserted on the serialised payload rather than on clinical.py, because
+    that is what a caller reads. The check is on the field being null and on
+    the string "burden" appearing nowhere in the clinical block — a
+    reintroduction under a new key would otherwise pass silently.
+    """
+    _case_id, body = await _analyze(client, auth, ref_factory, sample)
+    assert body["clinical"]["severity_index"] is None
+    assert "burden" not in json.dumps(body["clinical"]).lower()
+
+
+def test_the_other_severity_index_producers_still_populate_the_field():
+    """Removing the burden index must not empty the field for its two
+    legitimate producers.
+
+    Neither is a composite invented here: labs counts results that fall
+    outside their own reference range, and foot_risk reports an IWGDF
+    category set from clinical findings, not from an image. The field and
+    its card stay; only the weighted foot-image score is gone.
+    """
+    from app.foot_risk import stratify
+
+    risk = stratify(lops="present", pad="absent", deformity="absent",
+                    previous_ulcer="absent", previous_amputation="absent",
+                    end_stage_renal_disease="absent")
+    index = risk.clinical.severity_index
+    assert index is not None
+    assert index["name"] == "IWGDF risk category"
+    assert "burden" not in json.dumps(index).lower()
 
 
 

@@ -71,28 +71,31 @@ def _foot(grade: Grade, f: dict[str, Any]) -> ClinicalContext:
     brk = float(f.get("breakdown_pct", 0.0))
     nec = float(f.get("dark_area_pct", 0.0))
 
-    # Weighted surface burden. Necrotic-appearing tissue and an open bed carry
-    # far more weight than redness alone. Bounded 0-100; it summarises the
-    # IMAGE, not the limb.
-    burden = min(100.0, nec * 12.0 + brk * 6.0 + ery * 1.2)
-    band = ("minimal" if burden < 5 else
-            "mild" if burden < 20 else
-            "moderate" if burden < 50 else "extensive")
-
+    # No severity index is produced for an image of a foot.
+    #
+    # There was one: min(100, nec*12 + brk*6 + ery*1.2), banded
+    # minimal/mild/moderate/extensive. Its weights were not derived from
+    # anything — they were chosen to feel right — and the consequence was
+    # visible across three runs: a healthy foot on a light background scored
+    # 100%; a lesion covering ~17% of the detected surface scored 80.8%, then
+    # 89.2% on a later run of the same image; a multi-region fixture at ~20%
+    # surface scored 72.1%. A 12x weight on dark_area_pct saturates the cap at
+    # 8.3% dark pixels, and "dark pixels" is exactly what a shadow, a callus,
+    # pigmentation or henna also produce. The band it printed most often was
+    # "extensive", which no measurement could have contradicted.
+    #
+    # Deliberately not replaced with a better-weighted composite. A summary
+    # number here would have to be designed against validated data, and there
+    # is none. The per-feature percentages remain in the measurements payload,
+    # where they are what they claim to be: areas, individually reported.
+    #
+    # The other two producers of severity_index are unaffected and still
+    # populate it — labs/interpret.py counts results outside their reference
+    # range, and foot_risk.py reports an IWGDF category set from clinical
+    # findings. Both are countable or externally defined; neither is a
+    # weighting invented here.
     ctx = ClinicalContext(
-        severity_index={
-            "name": "Surface burden index",
-            "value": round(burden, 1),
-            "unit": "% (weighted surface score, 0-100)",
-            "band": band,
-            "components": {
-                "dark_area_pct": round(nec, 2),
-                "tissue_breakdown_pct": round(brk, 2),
-                "erythema_pct": round(ery, 2),
-            },
-            "caveat": "A composite of visible area only. It is not a wound "
-                      "grade and does not correlate with depth or infection.",
-        },
+        severity_index=None,
         scales={
             "SINBAD": {
                 "assessable_from_this_image": ["Area (surface extent only)"],
