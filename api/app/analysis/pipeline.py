@@ -11,8 +11,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from . import calibration, clarify, clinical, cv_utils
+from . import calibration, clarify, clinical, cv_utils, input_gate
 from .backends import get_backend
+from .input_gate import InputRejection
 from .overlay import render_overlay
 from .quality import run_quality_gate
 from .modules_config import routing_for
@@ -45,15 +46,45 @@ class AnalysisOutput:
     notes: list[str] = field(default_factory=list)
     subject_error: SubjectMismatch | None = None
     calibration: dict | None = None
+    # Set when the pre-analysis input gate refused the frame. When this is set
+    # there is no result, no overlay and no grade -- by construction, because
+    # `execute` returns before a backend is ever reached.
+    input_rejection: InputRejection | None = None
+
+    @property
+    def input_rejected(self) -> bool:
+        return self.input_rejection is not None
 
     @property
     def quality_rejected(self) -> bool:
-        return self.result is None
+        """A quality-gate refusal specifically.
+
+        An input-gate rejection also leaves `result` as None, and a caller that
+        reported it as a quality failure would tell the user to re-take a photo
+        that can never pass -- a stock image does not become a capture by being
+        photographed again.
+        """
+        return self.result is None and self.input_rejection is None
 
 
 # Which measured percentages describe an AREA on the subject, and so can be
 # converted to cm² once a size reference exists.
 _AREA_FEATURES = ("dark_area_pct", "breakdown_pct", "erythema_pct")
+
+
+def _ungraded_quality(image: np.ndarray, w: int, h: int) -> QualityReport:
+    """A placeholder report for a frame the input gate refused before the
+    quality gate ran.
+
+    Its checks are empty on purpose. Publishing focus and exposure numbers for
+    an image that was never accepted as a capture would invite a reader to
+    conclude the picture was fine -- and the finding is that it is not a
+    capture at all, whatever its focus was.
+    """
+    return QualityReport(
+        passed=False, checks=[], width=w, height=h, subject_fraction=0.0,
+        focus_var=0.0, exposure_mean=0.0, confidence_factor=0.0, mask=None,
+    )
 
 
 def _measurements(result, cal) -> dict:
@@ -95,12 +126,32 @@ def execute(job: AnalysisJob) -> AnalysisOutput:
         )
 
     h, w = image.shape[:2]
+
+    # -- the input gate, part one: is this a photograph of this patient? ------
+    # Before the quality gate, because these two questions are answerable on a
+    # frame the quality gate would condemn, and because a watermarked stock
+    # image should be refused for being one rather than sent back for a
+    # re-capture that cannot fix it.
+    refusal = input_gate.check_provenance(image)
+    if refusal is not None:
+        return AnalysisOutput(quality=_ungraded_quality(image, w, h), width=w,
+                              height=h, input_rejection=refusal)
+
     quality = run_quality_gate(image)
 
     # A failing image is never analysed. Analysing a photo we know is unusable
     # would produce a confident-looking result from nothing.
     if not quality.passed:
         return AnalysisOutput(quality=quality, width=w, height=h)
+
+    # -- the input gate, part two: is enough of the subject in frame? ---------
+    # After the quality gate. An underexposed frame reads as having no subject
+    # in it, and "move closer" is the wrong instruction for a photograph that
+    # needs more light. See input_gate.check_framing.
+    refusal = input_gate.check_framing(image)
+    if refusal is not None:
+        return AnalysisOutput(quality=quality, width=w, height=h,
+                              input_rejection=refusal)
 
     # Colour calibration sits AFTER the quality gate and BEFORE any module
     # measurement. The quality checks (focus, exposure, framing) describe the

@@ -59,6 +59,35 @@ class Settings(BaseSettings):
     quality_exposure_max: float = 215.0
     quality_min_subject_fraction: float = 0.08
 
+    # --- pre-analysis input gate ---------------------------------------------
+    # Whether the frame is a clinical photograph at all. Calibrated against
+    # tests/fixtures, which are DRAWINGS -- see analysis/input_gate.py for the
+    # measured separations each of these sits inside, and for which of them are
+    # boundaries the data drew and which are choices inside a gap.
+    gate_overlay_min_fill_cv: float = 0.15        # gap 0.073 .. 0.230
+    gate_overlay_max_min_solidity: float = 0.50   # gap 0.186 .. 0.811
+    gate_lattice_peak_z: float = 6.0              # gap 3.46 .. 8.63
+    gate_lattice_weak_z: float = 4.5              # corroborating only; a guess
+    gate_screen_panel_contrast: float = 45.0      # levels; a guess
+    # Bounded from BOTH sides by evidence, which is why it is only a little
+    # above the 0.08 that `quality_min_subject_fraction` still carries:
+    #   below 0.09  the pipeline goes non-monotonic -- see input_gate.py
+    #   at 0.109    a foot is graded correctly, percentages within 2% of the
+    #               same scene shot wide
+    #   at 0.121    test_subject_not_skin_refusal requires a verdict
+    #   at 0.145    test_smooth_skin_is_never_mistaken_for_a_card, and
+    #               test_shadow_is_not_reported_as_dead_tissue, require a grade
+    #   at 0.149    test_a_tightly_cropped_lesion_is_seen requires a grade
+    # 0.15 was tried first and broke all four: the project has already decided,
+    # deliberately, that a tightly cropped lesion must be seen. The usable
+    # window is 0.09 .. 0.12 and 0.10 sits in it.
+    #
+    # The number is NOT where the safety came from. The old check was not weak
+    # because 0.08 is small; it was weak because it measured
+    # `estimate_subject_mask`, which returns 1.0 when it fails. What changed is
+    # the measurement underneath, not the constant on top of it.
+    gate_min_subject_presence: float = 0.10
+
     # --- compliance ----------------------------------------------------------
     data_residency: str = "UAE"
     require_consent: bool = True

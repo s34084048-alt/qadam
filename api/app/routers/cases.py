@@ -254,6 +254,27 @@ async def analyze_case(
                  "or non-image file cannot be analysed.",
         )
 
+    # -- the input gate: not a clinical capture, so nothing is reported ------
+    # First, ahead of every other outcome. A watermarked stock image, a
+    # photograph of a screen or a frame with no subject in it must never reach
+    # a grade, an overlay or a stored image -- and this is the branch that
+    # guarantees it, because `output.result` is None by construction here.
+    if output.input_rejection is not None:
+        rejection = output.input_rejection
+        case.status = "quality_failed"
+        await audit.record(
+            session, actor_user_id=user.id,
+            organisation_id=user.organisation_id,
+            action="analysis.input_rejected", entity="case",
+            entity_id=case.id,
+            meta={"module": case.module, "reason": str(rejection.reason)},
+        )
+        await session.commit()
+        raise ApiError(
+            422, "input_rejected", rejection.detail, hint=rejection.hint,
+            details={"module": case.module, "input_gate": rejection.to_json()},
+        )
+
     # -- wrong subject: refuse rather than measure something meaningless ------
     if output.subject_error is not None:
         case.status = "quality_failed"
