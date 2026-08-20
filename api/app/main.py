@@ -176,10 +176,21 @@ def resolve_web_asset(web_root: Path, full_path: str) -> Path:
         return index
     try:
         candidate = (web_root / full_path).resolve()
-    except (OSError, ValueError):        # malformed or over-long path
+        # Containment is checked BEFORE touching the filesystem: it is pure
+        # string work, so it cannot raise, and a path that escapes the bundle
+        # must be refused whether or not it names something that exists.
+        if not candidate.is_relative_to(web_root):
+            return index
+        if candidate.is_file():
+            return candidate
+    except (OSError, ValueError):
+        # Anything the filesystem refuses to answer for is not a servable
+        # asset. `resolve()` rejects an embedded null byte (ValueError), and
+        # the `is_file()` stat rejects an over-long component (OSError
+        # ENAMETOOLONG) — that stat sits outside the try in the obvious
+        # arrangement of this function, and an unhandled OSError there is a
+        # 500 on an attacker-chosen path rather than the index fallback.
         return index
-    if candidate.is_file() and candidate.is_relative_to(web_root):
-        return candidate
     return index
 
 

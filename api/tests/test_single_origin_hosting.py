@@ -73,6 +73,29 @@ def test_a_malformed_path_falls_back_rather_than_raising(bundle):
     assert resolve_web_asset(bundle, "\x00bad") == bundle / "index.html"
 
 
+@pytest.mark.parametrize("hostile", [
+    "x" * 5000,                      # over-long single component
+    "a/" * 3000,                     # over-long by depth
+    "x" * 300 + "/" + "y" * 300,     # each component over NAME_MAX
+    "\x00bad",                       # embedded null byte
+    "assets/\x00.js",                # null byte below a real directory
+    "../" * 200 + "x" * 5000,        # escaping AND over-long
+    "x" * 5000 + "/../../secret.env",
+])
+def test_no_hostile_path_propagates_an_error(bundle, hostile):
+    """The fallback must absorb every path the filesystem refuses to answer for.
+
+    Regression: containment was checked with `candidate.is_file() and
+    candidate.is_relative_to(web_root)`. `is_file()` stats the path, and a
+    component over NAME_MAX raises OSError(ENAMETOOLONG) before the `and` ever
+    reached the containment half — so an attacker-chosen path produced a 500
+    carrying a traceback instead of index.html. Only `resolve()` was guarded.
+    """
+    resolved = resolve_web_asset(bundle, hostile)
+    assert resolved == bundle / "index.html"
+    assert "secret" not in resolved.name
+
+
 def test_api_only_by_default():
     """docker compose puts nginx in front and the dev server proxies, so the
     default must stay API-only rather than quietly mounting a stale bundle.
