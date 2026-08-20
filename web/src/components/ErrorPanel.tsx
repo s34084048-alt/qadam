@@ -16,7 +16,9 @@ export function ErrorPanel({ error }: { error: unknown }) {
     <div className="error-panel" role="alert">
       <h3>{isApi && error.code === 'image_quality_rejected'
         ? t('quality.rejected')
-        : t('common.error')}</h3>
+        : isApi && error.code === 'input_rejected'
+          ? t('gate.rejected')
+          : t('common.error')}</h3>
       <p>{message}</p>
       {quality?.checks && (
         <ul className="plain">

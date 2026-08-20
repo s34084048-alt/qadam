@@ -414,6 +414,10 @@ const en: Dict = {
   'result.severity': 'Severity',
 
   'quality.rejected': 'Image rejected — please re-capture',
+  // Distinct from quality.rejected on purpose. A watermarked image or a photo
+  // of a screen is not a capture problem, and telling someone to re-capture it
+  // sends them back to take the same picture again.
+  'gate.rejected': 'This image was not analysed',
   'quality.passed': 'Passed',
   'quality.degraded': 'Degraded',
   'quality.check.resolution': 'Resolution',
@@ -860,6 +864,7 @@ const ar: Dict = {
   'result.severity': 'الشدة',
 
   'quality.rejected': 'رُفضت الصورة — يرجى إعادة الالتقاط',
+  'gate.rejected': 'لم يتم تحليل هذه الصورة',
   'quality.passed': 'مقبولة',
   'quality.degraded': 'منخفضة',
   'quality.check.resolution': 'الدقة',
