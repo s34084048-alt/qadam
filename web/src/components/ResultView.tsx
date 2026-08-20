@@ -52,6 +52,28 @@ export function TriageCard({ analysis }: { analysis: Analysis }) {
         <details className="meta evidence-strength-hint">
           <summary>{t('result.aboutScore')}</summary>
           {t('result.evidenceStrengthHint')}
+          {/* Why this number is what it is. A score that silently ignores its
+              own failed preconditions is the defect these adjustments exist to
+              fix, so showing the number without showing the reductions applied
+              to it would reintroduce it in the UI. */}
+          {triage.confidence_adjustments?.length > 0 && (
+            <div className="score-adjustments">
+              <p>{t('result.scoreAdjustments')}</p>
+              <ul className="plain">
+                {triage.confidence_adjustments.map((adj) => (
+                  <li key={`${adj.kind}-${adj.reason}`}>
+                    <strong>
+                      {adj.kind === 'cap'
+                        ? t('result.scoreCap') : t('result.scorePenalty')}
+                      {' '}
+                      {(adj.from * 100).toFixed(0)}% → {(adj.to * 100).toFixed(0)}%
+                    </strong>
+                    {' — '}{adj.detail}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </details>
       )}
       {triage.grade === 'no_flag' && (

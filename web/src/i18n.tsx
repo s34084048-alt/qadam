@@ -390,6 +390,10 @@ const en: Dict = {
   'result.distance': 'Evidence strength (uncalibrated)',
   'result.evidenceStrengthHint':
     'A heuristic score, not a probability. It reflects how far the measurement sits from a decision threshold, discounted by image quality — it is NOT calibrated against clinical outcomes and must not be read as a percentage chance of anything.',
+  'result.scoreAdjustments':
+    'This score was reduced because the image did not meet the conditions the measurement depends on:',
+  'result.scoreCap': 'Capped',
+  'result.scorePenalty': 'Reduced',
   'result.noFlagMeaning':
     'No surface feature was detected — that is all this means. It is not a measure of how healthy the foot is, and it does not exclude ischaemia, neuropathy, infection or anything beneath the skin.',
   'result.nextStep': 'Recommended next step',
@@ -832,6 +836,10 @@ const ar: Dict = {
   'result.distance': 'قوة الدليل (غير معايَرة)',
   'result.evidenceStrengthHint':
     'مؤشّر استدلالي، لا احتمال. يعكس بُعد القياس عن عتبة القرار مخصوماً بجودة الصورة — وهو غير معاير مقابل النتائج السريرية، ولا يجوز قراءته كنسبة احتمال لأي شيء.',
+  'result.scoreAdjustments':
+    'خُفِّضت هذه الدرجة لأن الصورة لم تستوفِ الشروط التي يعتمد عليها القياس:',
+  'result.scoreCap': 'حُدَّت',
+  'result.scorePenalty': 'خُفِّضت',
   'result.noFlagMeaning':
     'لم تُكتشف أي سمة سطحية — هذا كل ما يعنيه الأمر. ليس قياساً لسلامة القدم، ولا يستبعد نقص التروية أو الاعتلال العصبي أو العدوى أو أي شيء تحت الجلد.',
   'result.nextStep': 'الخطوة التالية الموصى بها',

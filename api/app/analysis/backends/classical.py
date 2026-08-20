@@ -12,10 +12,13 @@ still be reported stratified by Monk Skin Tone group (see /admin/fairness).
 
 from __future__ import annotations
 
+from typing import Any
+
 import cv2
 import numpy as np
 
-from .. import cv_utils, evidence, localization, segmentation
+from .. import (cv_utils, evidence, localization, prerequisites,
+                segmentation)
 from ..modules_config import routing_for
 from ..types import (Grade, Lesion, ModuleResult, QualityReport,
                      SubjectMismatch, Triage)
@@ -92,13 +95,15 @@ def _conf(evidence: float, quality: QualityReport) -> float:
 
 
 def _triage(
-    module: str, grade: Grade, confidence: float, rationale: list[str]
+    module: str, grade: Grade, confidence: float, rationale: list[str],
+    confidence_adjustments: list[dict] | None = None,
 ) -> Triage:
     spec = routing_for(module, str(grade))
     return Triage(
         grade=grade,
         label=spec["label"],
         confidence=confidence,
+        confidence_adjustments=list(confidence_adjustments or []),
         rationale=rationale,
         next_investigation=spec["next_investigation"],
         urgency=spec["urgency"],
@@ -140,13 +145,23 @@ class ClassicalCVBackend:
         return module == "foot"
 
     def analyze(
-        self, image_bgr: np.ndarray, module: str, quality: QualityReport
+        self,
+        image_bgr: np.ndarray,
+        module: str,
+        quality: QualityReport,
+        calibration: Any | None = None,
     ) -> ModuleResult:
         mask = quality.mask
         if mask is None:
             mask, _ = cv_utils.estimate_subject_mask(image_bgr)
         subject = mask > 0
-        if subject.sum() < 100:
+        # The segmentation found essentially nothing and the whole frame is
+        # substituted for it. That is a FAILURE, and until now it was silent:
+        # every percentage below is then a share of the photograph, background
+        # included, and nothing downstream said so. Recorded, and fed to the
+        # confidence prerequisites.
+        subject_mask_was_degenerate = bool(subject.sum() < 100)
+        if subject_mask_was_degenerate:
             mask = np.full(image_bgr.shape[:2], 255, dtype=np.uint8)
             subject = mask > 0
 
@@ -167,7 +182,10 @@ class ClassicalCVBackend:
         fn = {
             "foot": self._foot,
         }[module]
-        result = fn(image_bgr, mask, quality)
+        result = fn(image_bgr, mask, quality,
+                    background_warning=background_warning,
+                    subject_mask_was_degenerate=subject_mask_was_degenerate,
+                    calibration=calibration)
         if background_warning:
             result.features["framing_warning"] = background_warning
             result.triage.rationale.insert(0, background_warning["effect"])
@@ -450,7 +468,10 @@ class ClassicalCVBackend:
             "lesion alone.",
         )
 
-    def _foot(self, bgr, mask, quality) -> ModuleResult:
+    def _foot(self, bgr, mask, quality, *,
+              background_warning=None,
+              subject_mask_was_degenerate=False,
+              calibration=None) -> ModuleResult:
         t = T["foot"]
         L, a, b = cv_utils.lab_planes(bgr)
         subject = mask > 0
@@ -654,9 +675,30 @@ class ClassicalCVBackend:
             "Depth, bone involvement, infection, perfusion and neuropathy are "
             "not assessable from a photograph."
         )
+        # EVIDENCE STRENGTH IS COUPLED TO ITS OWN PRECONDITIONS HERE.
+        #
+        # `_conf` scores how far the measurement sits from its decision
+        # boundary. It cannot see whether the measurement was possible: it
+        # returned 0.85 on a run where the segmentation had explicitly failed,
+        # and 0.53 on a healthy foot whose "dark area" was background. The cap
+        # and penalties below make the score structurally dependent on the
+        # conditions that make it mean anything, and every one of them is
+        # itemised onto the Triage so the reader sees the reason, not just the
+        # number.
+        prereqs = prerequisites.evaluate(
+            background_warning=background_warning,
+            subject_mask_was_degenerate=subject_mask_was_degenerate,
+            wound_classification=seg.classification,
+            no_wound_region_marker=localization.NONE,
+            calibration=calibration,
+        )
+        confidence, adjustments = prerequisites.apply(
+            _conf(strength, quality), prereqs)
+
         return ModuleResult(
             lesions=lesions,
-            triage=_triage("foot", grade, _conf(strength, quality), rationale),
+            triage=_triage("foot", grade, confidence, rationale,
+                           confidence_adjustments=adjustments),
             features={
                 "erythema_pct": round(ery_pct, 3),
                 "breakdown_pct": round(brk_pct, 3),

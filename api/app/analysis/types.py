@@ -70,6 +70,11 @@ class Triage:
     next_investigation: str = ""
     urgency: str = ""            # human-readable timeframe
     routing_target: str = ""     # who/where the patient goes
+    # Every cap and penalty applied to `confidence` by analysis.prerequisites,
+    # in the order applied. The number alone cannot say why it is what it is,
+    # and a reader who is not shown the reason has to take it on trust.
+    # Carried as a value on the result, never as state on the backend.
+    confidence_adjustments: list[dict[str, Any]] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -80,6 +85,7 @@ class Triage:
             "next_investigation": self.next_investigation,
             "urgency": self.urgency,
             "routing_target": self.routing_target,
+            "confidence_adjustments": list(self.confidence_adjustments),
         }
 
 

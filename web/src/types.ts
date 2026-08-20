@@ -67,10 +67,24 @@ export interface LesionOut {
   description: string
 }
 
+export interface ConfidenceAdjustment {
+  // 'cap' hard-limits the score because a prerequisite for measuring the
+  // image failed; 'penalty' subtracts for a missing or unusable size
+  // reference. See api/app/analysis/prerequisites.py.
+  kind: 'cap' | 'penalty'
+  reason: string
+  detail: string
+  from: number
+  to: number
+  penalty?: number
+  triggered_by?: string[]
+}
+
 export interface Triage {
   grade: Grade
   label: string
   confidence: number
+  confidence_adjustments: ConfidenceAdjustment[]
   rationale: string[]
   next_investigation: string
   urgency: string

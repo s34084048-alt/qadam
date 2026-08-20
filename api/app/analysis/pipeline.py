@@ -123,7 +123,11 @@ def execute(job: AnalysisJob) -> AnalysisOutput:
         backend = get_backend(job.module, "classical_cv")
 
     try:
-        result = backend.analyze(image, job.module, quality)
+        # `cal` is computed above, before any measurement, and is passed in
+        # because evidence strength is coupled to it: whether a usable size
+        # reference was in the frame is a precondition for the score meaning
+        # anything. See analysis.prerequisites.
+        result = backend.analyze(image, job.module, quality, cal)
     except SubjectMismatch as mismatch:
         # Not a quality problem -- the picture may be perfectly sharp. It is
         # simply not a picture of what this module assesses.

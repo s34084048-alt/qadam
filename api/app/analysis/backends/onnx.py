@@ -12,8 +12,11 @@ from the routing config, never from the model.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
+from .. import localization, prerequisites
 from ..modules_config import routing_for
 from ..types import Grade, Lesion, ModuleResult, QualityReport, Triage
 
@@ -78,7 +81,11 @@ class OnnxBackend:
         )
 
     def analyze(
-        self, image_bgr: np.ndarray, module: str, quality: QualityReport
+        self,
+        image_bgr: np.ndarray,
+        module: str,
+        quality: QualityReport,
+        calibration: Any | None = None,
     ) -> ModuleResult:
         tensor = self._preprocess(image_bgr)
         outputs = self._session.run(None, {self._input_name: tensor})
@@ -88,11 +95,33 @@ class OnnxBackend:
         # Confidence is always discounted by measured image quality, whatever
         # the model reports.
         confidence = float(np.clip(confidence * quality.confidence_factor, 0.05, 0.95))
+
+        # The size-reference prerequisites are a property of the CAPTURE, not
+        # of whichever model read it: a frame with no usable card cannot yield
+        # cm2 or a between-visit comparison whatever produced the grade. So
+        # they are applied here too, and itemised identically.
+        #
+        # The segmentation prerequisites are deliberately NOT asserted for this
+        # backend. They are read off the classical widen/localisation steps,
+        # and this backend does not run them; inventing an equivalent from a
+        # model whose output heads are not yet defined would be fabricating a
+        # check that never happened.
+        confidence, adjustments = prerequisites.apply(
+            confidence,
+            prerequisites.evaluate(
+                background_warning=None,
+                subject_mask_was_degenerate=False,
+                wound_classification=None,
+                no_wound_region_marker=localization.NONE,
+                calibration=calibration,
+            ),
+        )
         spec = routing_for(module, str(grade))
         triage = Triage(
             grade=grade,
             label=spec["label"],
             confidence=confidence,
+            confidence_adjustments=adjustments,
             rationale=rationale,
             next_investigation=spec["next_investigation"],
             urgency=spec["urgency"],

@@ -77,12 +77,12 @@ def test_the_framing_warning_belongs_to_one_analysis_not_the_backend():
     b_has_finished = threading.Event()
     original_foot = ClassicalCVBackend._foot
 
-    def _foot_holding_a_open_across_b(self, bgr, mask, quality):
+    def _foot_holding_a_open_across_b(self, bgr, mask, quality, **kwargs):
         # Only A pauses. B must run start to finish inside this window.
         if threading.current_thread().name == "analysis-a":
             a_is_inside_the_measurement.set()
             assert b_has_finished.wait(timeout=30), "B never completed"
-        return original_foot(self, bgr, mask, quality)
+        return original_foot(self, bgr, mask, quality, **kwargs)
 
     ClassicalCVBackend._foot = _foot_holding_a_open_across_b
     try:

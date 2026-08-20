@@ -876,3 +876,10 @@ section .limitations > summary {
 }
 details.clinical-detail[open] > summary { margin-bottom: .4rem; }
 details.evidence-strength-hint > summary { opacity: .9; font-weight: 500; }
+
+/* The itemised caps and penalties applied to the evidence-strength score.
+   Indented under the score explanation so it reads as "and here is what was
+   subtracted, and why" rather than as a separate warning block. */
+.score-adjustments { margin-top: .5rem; }
+.score-adjustments > p { margin: 0 0 .3rem; }
+.score-adjustments li { margin-bottom: .3rem; }
