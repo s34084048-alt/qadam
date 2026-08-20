@@ -150,8 +150,17 @@ class ClassicalCVBackend:
             mask = np.full(image_bgr.shape[:2], 255, dtype=np.uint8)
             subject = mask > 0
 
-        self._background_warning = None
-        mask = self._widen_if_the_segmentation_split_skin(image_bgr, mask)
+        # Findings from the pre-measurement steps are LOCALS, never attributes.
+        # This object is a module-level singleton (see backends/__init__) and
+        # analyses run concurrently in a worker thread pool (runner.py uses
+        # anyio.to_thread.run_sync), so anything written to `self` here belongs
+        # to whichever analysis wrote it last. `framing_warning` was an
+        # attribute, and a second analysis entering this method reset it while
+        # the first was still measuring -- losing the first one's "percentages
+        # are UNDERSTATED" warning with no error anywhere. Understated areas
+        # are the direction that hides things.
+        mask, background_warning = self._widen_if_the_segmentation_split_skin(
+            image_bgr, mask)
         mask = self._widen_if_the_lesion_became_the_subject(image_bgr, mask, module)
         unexpected = self._note_if_subject_is_unexpected(image_bgr, mask)
 
@@ -159,9 +168,9 @@ class ClassicalCVBackend:
             "foot": self._foot,
         }[module]
         result = fn(image_bgr, mask, quality)
-        if self._background_warning:
-            result.features["framing_warning"] = self._background_warning
-            result.triage.rationale.insert(0, self._background_warning["effect"])
+        if background_warning:
+            result.features["framing_warning"] = background_warning
+            result.triage.rationale.insert(0, background_warning["effect"])
         if unexpected:
             result.features["subject_check"] = unexpected
             result.triage.rationale.insert(0, unexpected["warning"])
@@ -209,6 +218,10 @@ class ClassicalCVBackend:
     def _widen_if_the_segmentation_split_skin(self, bgr, mask):
         """Undo a segmentation that cut one continuous skin surface in half.
 
+        Returns `(mask, warning_or_None)`. The warning is returned rather than
+        stored on `self` because this backend is a shared singleton serving
+        concurrent analyses -- see the note in `analyze`.
+
         `estimate_subject_mask` models the background from the image border. On
         a plain backdrop that works. Photograph a toe on a beige mat, a wooden
         table or a bedsheet — anything close to skin colour — and the border
@@ -227,11 +240,11 @@ class ClassicalCVBackend:
         subject = mask > 0
         frame_share = float(subject.mean())
         if frame_share >= 0.55 or subject.sum() < 100:
-            return mask
+            return mask, None
 
         outside = (~subject).astype(np.uint8) * 255
         if (outside > 0).sum() < 500:
-            return mask
+            return mask, None
         inside_skin, _ = cv_utils.looks_like_skin(a, b, mask)
         outside_skin, _ = cv_utils.looks_like_skin(a, b, outside)
         if inside_skin and outside_skin:
@@ -239,7 +252,7 @@ class ClassicalCVBackend:
             # fragment makes every percentage arbitrary. But the whole frame
             # now includes background, so an area is UNDERSTATED — and that is
             # the direction that hides things. Say so.
-            self._background_warning = {
+            warning = {
                 "issue": "background_same_colour_as_skin",
                 "effect": (
                     "The foot could not be separated from the background "
@@ -253,8 +266,8 @@ class ClassicalCVBackend:
                     "sheet is ideal."
                 ),
             }
-            return np.full(bgr.shape[:2], 255, dtype=np.uint8)
-        return mask
+            return np.full(bgr.shape[:2], 255, dtype=np.uint8), warning
+        return mask, None
 
     def _widen_if_the_lesion_became_the_subject(self, bgr, mask, module: str):
         """Fix a segmentation that picked the wound instead of the limb.
