@@ -10,6 +10,68 @@ that motivated it.
 
 ---
 
+## 2026-08 — The reference-card false positive
+
+One commit on `claude/input-gate-rebuild-fxhqqn`. Test suite: **522 passing, 0
+failing** (516 before, 6 added). Frontend typecheck clean.
+
+### The contradiction
+
+The gate shipped in `0b1db75` rejected a reference card's printed markings as
+a watermark. The capture instructions *ask* for a card in the frame, and real
+cards carry printing — a size, a grey value, a maker's name. A gate that
+refuses the workflow the product recommends is a gate that gets switched off,
+and then nothing is gated at all.
+
+Measured before the fix, on a card that calibration accepts (`applied=True`,
+`L_std` 10.1 against a limit of 14):
+
+```
+AssertionError: a capture made the way the instructions describe was REFUSED:
+reason=overlay lines=[6]
+```
+
+### The fix is spatial, not a switch
+
+Text lying **wholly inside** a detected card is exempt; anything outside still
+rejects. Straddling the edge is not printing on a card — a mark placed half-on
+a card would otherwise be ignored, which is a bypass anyone could use on
+purpose.
+
+The gate locates the card with exactly the calls `pipeline.execute` makes
+later — `estimate_subject_mask`, then `find_reference_card` with that mask —
+so the region it exempts is the region calibration will use. Both are
+deterministic on the same input, so they cannot disagree, and a test asserts
+the two agree rather than trusting it. The lookup only runs when a text line
+was actually found, so an ordinary capture never pays for card detection twice.
+
+The card descriptor also carries a `mask`, and it is the **wrong** handle: that
+mask is the eroded *neutral* region, and ink is not neutral, so the printing is
+exactly what it leaves out. Containment is tested against the bounding box.
+
+| | before | after |
+|---|---|---|
+| `carded_foot` | REJECTED `overlay` | urgent 0.85, calibration applied, cm² available |
+| `carded_and_watermarked_foot` | rejected (for the card's own print) | REJECTED `overlay`, card print exempted, watermark caught |
+| `watermarked_foot` | REJECTED `overlay` | REJECTED `overlay` |
+| everything else | unchanged | unchanged |
+
+### The fixture had to be made legible before it proved anything
+
+The first version of `carded_foot` printed three lines at ~10 px glyph height,
+and it **passed the gate even before the exemption existed** — its measured
+fill-ratio CV was 0.143 against a 0.15 threshold. At that size the statistics
+sit on the boundary and sensor noise decides the verdict: the same card built
+with a different noise seed rejected. A test written against it would have
+passed on both trees and proved nothing.
+
+The committed fixture prints at a size the detector reads as text on every
+seed tried — fill-ratio CV 0.26–0.28 against 0.15, minimum solidity 0.17–0.18
+against 0.50 — while the card still calibrates. That window is narrower than
+it looks, and finding it turned up something new, recorded below.
+
+---
+
 ## 2026-08 — The input gate, rebuilt
 
 Three commits on `claude/input-gate-rebuild-fxhqqn`. Test suite: **516
@@ -314,37 +376,45 @@ Recorded because they shaped what was *not* done as much as what was:
 Found while building the input gate (`8ac855a`), each verified by running it
 rather than reasoned about:
 
-1. **A reference card with printed text is rejected as an overlay.** The
-   calibration workflow asks for a card in the frame, and real cards carry
-   printed markings; a card lettered "ID-1 85.6mm / CALIB CARD" is refused.
-   This is the gate's most likely false positive in normal use and it lands on
-   the workflow the product recommends. Not fixed here because the fix is a
-   spatial exemption — text *inside* a detected card region — and it needs the
-   card detector and the gate to agree on region boundaries, which is more
-   than a threshold change.
-2. **Small overlay text is missed.** A burned-in camera date stamp at ~15 px
+1. ~~A reference card with printed text is rejected as an overlay.~~ **Fixed**
+   — see the entry above. What replaced it: a watermark that falls *wholly
+   inside* a detected card region is now exempted along with the card's own
+   printing. The exemption is bounded by the card detector's own limits (at
+   most `REFERENCE_MAX_AREA_FRAC`, 25% of the frame, neutral, flat and beside
+   the subject rather than on it), and it is the price of not refusing every
+   carded capture.
+2. **A card printed boldly enough is refused by CALIBRATION, not by the gate.**
+   Found while sizing the fixture. `REFERENCE_MAX_L_STD` is 14, and larger,
+   darker or heavier print covers enough of the card to push its `L_std` past
+   that — at print scale 0.75 with a 2 px stroke it reached 19.1 and the card
+   came back `applied=False`; bigger still and it is not detected at all. So a
+   heavily printed card remains unusable as a colour reference no matter what
+   the gate does. Not fixed: the flatness check is doing its job — a card whose
+   surface is half ink is not a neutral patch — and the real answer is capture
+   guidance about which face of the card to show, not a looser constant.
+3. **Small overlay text is missed.** A burned-in camera date stamp at ~15 px
    glyph height measured `fill_cv` 0.143 against the 0.15 threshold and
    `min_solidity` 0.673 against 0.50 — it failed both, narrowly on one. The
    same stamp at 2.3× is detected. At that size JPEG and resampling degrade
    glyph shapes until their fill ratios and solidities converge, so the gate's
    sensitivity is size-dependent. Lowering the thresholds to catch it would
    walk into the glint numbers above.
-3. **A wordless pictorial logo is not detected.** A filled, hard-edged,
+4. **A wordless pictorial logo is not detected.** A filled, hard-edged,
    non-skin polygon mark over a wound is still graded `urgent`. The gate
    detects overlays that carry *text*; a purely graphic mark has no glyph row
    to find. Most watermarks carry text, which is why this was the priority,
    but "text or logo" is only half answered.
-4. **Fewer than four glyphs is below the floor.** A three-character mark
+5. **Fewer than four glyphs is below the floor.** A three-character mark
    ("IMG") passes. Deliberate — three uniform shapes cannot be told from three
    glints — but it is a hole and someone should know it is there.
-5. **`AnalysisOutput.quality_rejected` is True when `subject_error` is set**,
+6. **`AnalysisOutput.quality_rejected` is True when `subject_error` is set**,
    with an empty failure list. Pre-existing, and `cases.py` is safe because it
    checks `subject_error` first, but any new caller reading that property gets
    "the quality gate rejected this" with nothing to show for it. The same
    conflation for input-gate rejections *was* fixed in `0b1db75`; this one was
    left alone because changing it touches a property this session did not
    otherwise own.
-6. **The rephotograph thresholds rest on one positive fixture.** Overlay
+7. **The rephotograph thresholds rest on one positive fixture.** Overlay
    detection was calibrated against seven measured rows including four
    adversarial negatives; the lattice thresholds have one synthetic positive
    and eleven negatives. The corroborating threshold (4.5) and the panel

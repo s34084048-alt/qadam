@@ -150,6 +150,102 @@ def test_specular_highlights_in_a_row_are_not_read_as_text(uniform_sizes):
         "a row of specular highlights was read as a line of text")
 
 
+# --- the reference card the workflow asks for --------------------------------
+
+def test_a_reference_card_with_printed_markings_is_not_a_watermark():
+    """The gate's most costly possible false positive.
+
+    The capture instructions ask for a neutral card beside the wound, and real
+    cards carry printed markings -- a size, a grey value, a maker's name. A
+    gate that refuses the workflow the product recommends is a gate that gets
+    switched off, and then nothing is gated at all.
+    """
+    out = _run("carded_foot")
+
+    assert out.input_rejection is None, (
+        "a capture made the way the instructions describe was refused: "
+        f"{out.input_rejection.detail if out.input_rejection else ''}")
+    assert out.result is not None
+    assert str(out.result.triage.grade) == "urgent"
+
+
+def test_the_exempted_card_is_still_usable_for_calibration():
+    """Passing the gate is not enough. The card has to survive as a CARD --
+    exempting it by quietly ignoring that region would trade one silent
+    failure for another."""
+    out = _run("carded_foot")
+    assert out.calibration is not None
+
+    assert out.calibration["detected"] is True
+    assert out.calibration["applied"] is True, (
+        "the card was exempted from the gate but not used to correct colour")
+    assert out.calibration["scale"]["available"] is True, (
+        "the card gave no size reference, so nothing is comparable between "
+        "visits")
+
+    areas = out.result.features["measurement"]["areas"]
+    assert areas["breakdown_pct"]["cm2"] > 0, (
+        "areas came back without the cm2 the card exists to provide")
+
+
+def test_a_watermark_outside_the_card_is_still_rejected():
+    """The exemption has to be SPATIAL. If a card in frame switched overlay
+    detection off, then adding a card would be all it took to get any stock
+    image graded -- a gate with its own bypass documented on the box."""
+    out = _run("carded_and_watermarked_foot")
+
+    assert out.input_rejection is not None, (
+        "a watermark went unnoticed because a reference card was in frame")
+    assert out.input_rejection.reason == RejectionReason.OVERLAY
+    assert out.result is None
+
+    evidence = out.input_rejection.evidence
+    assert evidence["reference_card"] is not None, "no card was found here"
+    assert evidence["lines_on_the_card"] >= 1, (
+        "the card's own printing should have been exempted, not counted")
+    assert evidence["text_lines"], "rejected without naming the offending line"
+
+
+def test_the_exemption_covers_only_what_lies_wholly_inside_the_card():
+    """Straddling the edge is not printing on the card.
+
+    Without this, a mark placed half-on a card would be ignored, and that is a
+    bypass anyone could use on purpose.
+    """
+    card = [100, 100, 200, 80]
+    wholly_inside = {"bbox": [120, 110, 100, 40]}
+    straddling = {"bbox": [280, 110, 100, 40]}
+    surrounding = {"bbox": [90, 90, 300, 200]}
+    flush = {"bbox": [100, 100, 200, 80]}
+
+    assert input_gate._inside(wholly_inside, card) is True
+    assert input_gate._inside(flush, card) is True
+    assert input_gate._inside(straddling, card) is False
+    assert input_gate._inside(surrounding, card) is False
+
+
+def test_the_card_lookup_matches_what_calibration_will_find():
+    """The gate exempts a region it locates itself. If it and calibration
+    disagreed about where the card is, the gate would be exempting somewhere
+    the card is not."""
+    from app.analysis import calibration as calibration_mod
+
+    img = cv2.imdecode(np.frombuffer(fx.jpeg_bytes("carded_foot"), np.uint8),
+                       cv2.IMREAD_COLOR)
+    work = input_gate._work_image(img)
+    gate_region = input_gate._reference_card_region(img, work.shape[:2])
+    assert gate_region is not None
+
+    from app.analysis import cv_utils
+    mask, _fraction = cv_utils.estimate_subject_mask(img)
+    _out, _m, cal = calibration_mod.calibrate(img, mask)
+    box = cal.card["bbox"]
+
+    scale = work.shape[1] / img.shape[1]
+    assert gate_region == [int(box["x"] * scale), int(box["y"] * scale),
+                           int(box["w"] * scale), int(box["h"] * scale)]
+
+
 def test_the_existing_samples_all_still_reach_the_gate_intact():
     """Nothing the pipeline already grades may be turned away by the gate."""
     from app import sample_data
@@ -249,6 +345,7 @@ async def test_the_api_refuses_a_watermarked_upload_and_stores_nothing(
     ("watermarked_foot", "overlay"),
     ("screen_photo", "rephotograph"),
     ("distant_foot", "subject_absent"),
+    ("carded_and_watermarked_foot", "overlay"),
 ])
 async def test_every_rejection_reason_reaches_the_client(
     client, auth, ref_factory, fixture, reason

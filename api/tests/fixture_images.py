@@ -235,6 +235,80 @@ def screen_photo(seed: int = 51) -> np.ndarray:
     return _sensor_noise(out, seed, amount=2.0)
 
 
+# The reference card the capture instructions ask for. Laid beside the foot
+# with a clear gap: a card touching the subject merges with it into one bright
+# neutral component and is then not a card at all, which is a property of
+# cv_utils.find_reference_card and not of this drawing.
+# 196 x 124 is 1.58:1, the ISO/IEC 7810 ID-1 aspect, so `scale.from_card`
+# accepts it as a size reference instead of refusing it as a tilted rectangle.
+# The width is bounded from the other side too: a card wide enough to touch the
+# foot merges with it into a single bright neutral component and stops being a
+# card at all, which is a property of cv_utils.find_reference_card and not of
+# this drawing.
+CARD_BOX = (28, 34, 196, 124)          # x, y, w, h
+CARD_PRINT = (120, 120, 120)           # BGR; grey ink, as cards are printed
+CARD_LINES = ("85.6 mm", "GREY 18")
+
+# The print has to be legible enough that the detector reads it as TEXT, or the
+# fixture proves nothing: at ~10 px glyph height the measurements sit on the
+# threshold and sensor noise decides the verdict, so a smaller-printed version
+# of this card passed the gate even BEFORE the exemption existed. At this size
+# it reads as text on every seed tried (fill-ratio CV 0.26-0.28 against a 0.15
+# threshold, minimum solidity 0.17-0.18 against 0.50) while the card still
+# calibrates: L_std stays near 7 against a limit of 14, because larger, bolder
+# or darker print covers enough of the card to fail its flatness check and
+# would then be refused by calibration whatever the gate did.
+CARD_PRINT_SCALE = 0.8
+CARD_PRINT_THICKNESS = 1
+
+
+def _reference_card(img: np.ndarray, seed: int, *, printed: bool = True) -> None:
+    """A flat neutral card, optionally carrying its printed markings."""
+    x, y, w, h = CARD_BOX
+    rng = np.random.default_rng(seed)
+    patch = np.full((h, w, 3), 200, dtype=np.float32) + rng.normal(0, 1.5, (h, w, 3))
+    img[y:y + h, x:x + w] = np.clip(patch, 0, 255).astype(np.uint8)
+    if not printed:
+        return
+    step = h // (len(CARD_LINES) + 1)
+    for i, line in enumerate(CARD_LINES):
+        cv2.putText(img, line, (x + 14, y + step * (i + 1) + 9),
+                    cv2.FONT_HERSHEY_SIMPLEX, CARD_PRINT_SCALE, CARD_PRINT,
+                    CARD_PRINT_THICKNESS, cv2.LINE_AA)
+
+
+def carded_foot(seed: int = 97) -> np.ndarray:
+    """A wound photographed the way the instructions say to: with a reference
+    card in the frame. The card carries printed markings, because real ones do.
+
+    MUST PASS the gate, and the card must still be usable for calibration.
+
+    This is the gate's most costly possible false positive: the capture
+    workflow the product recommends is the one that puts printed text in the
+    frame, and a gate that refuses it is a gate that gets switched off.
+    """
+    img, mask = _foot_base(seed)
+    cv2.ellipse(img, (410, 430), (96, 74), 0, 0, 360, (95, 115, 190), -1)
+    cv2.ellipse(img, (410, 434), (60, 46), 0, 0, 360, (110, 190, 215), -1)
+    _texture(img, mask, seed + 1, amount=4.0)
+    _reference_card(img, seed + 2)
+    return _sensor_noise(img, seed)
+
+
+def carded_and_watermarked_foot(seed: int = 103) -> np.ndarray:
+    """The same carded capture, plus a clinic watermark clear of the card.
+
+    The exemption must be a SPATIAL one, not a switch that a card in frame
+    turns off. MUST BE REJECTED, reason `overlay`.
+    """
+    img = carded_foot(seed)
+    white = (245, 245, 245)
+    for dx, dy, col in ((2, 2, (40, 40, 40)), (0, 0, white)):
+        cv2.putText(img, "WOUNDI.COM", (300 + dx, 560 + dy),
+                    cv2.FONT_HERSHEY_DUPLEX, 1.2, col, 3, cv2.LINE_AA)
+    return _sensor_noise(img, seed + 1)
+
+
 def distant_foot(seed: int = 61) -> np.ndarray:
     """The foot at arm's length: correctly exposed, sharp, and too far away.
 
@@ -252,6 +326,8 @@ def distant_foot(seed: int = 61) -> np.ndarray:
 
 FIXTURES = {
     "clean_foot": clean_foot,
+    "carded_foot": carded_foot,
+    "carded_and_watermarked_foot": carded_and_watermarked_foot,
     "wet_ulcer": wet_ulcer,
     "watermarked_foot": watermarked_foot,
     "screen_photo": screen_photo,

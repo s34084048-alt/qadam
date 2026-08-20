@@ -234,14 +234,61 @@ def _text_lines(cands: list[dict]) -> list[dict]:
             continue
         fills = np.array([g["fill"] for g in run], dtype=float)
         sols = np.array([g["solidity"] for g in run], dtype=float)
+        x0 = min(g["x"] for g in run)
+        y0 = min(g["y"] for g in run)
+        x1 = max(g["x"] + g["w"] for g in run)
+        y1 = max(g["y"] + g["h"] for g in run)
         lines.append({
             "glyphs": len(run),
             "fill_cv": float(fills.std() / fills.mean()) if fills.mean() else 0.0,
             "min_solidity": float(sols.min()),
             "height_px": float(np.mean([g["h"] for g in run])),
-            "at": [int(min(g["x"] for g in run)), int(min(g["y"] for g in run))],
+            "at": [int(x0), int(y0)],
+            "bbox": [int(x0), int(y0), int(x1 - x0), int(y1 - y0)],
         })
     return lines
+
+
+def _reference_card_region(bgr: np.ndarray,
+                           work_shape: tuple[int, int]) -> list[int] | None:
+    """The reference card's bounding box, in WORK-image coordinates.
+
+    Found with exactly the calls `pipeline.execute` will make later --
+    `estimate_subject_mask` on this image, then `find_reference_card` with that
+    mask -- so the card the gate exempts is the same card calibration will use.
+    Both are deterministic on the same input, so the two cannot disagree.
+
+    The card descriptor also carries a `mask`, and it is the WRONG handle here.
+    That mask is the eroded NEUTRAL region, and printed text is not neutral --
+    the ink is precisely what the mask leaves out, so testing containment
+    against it would exempt nothing. The bounding box is what encloses a card
+    and everything printed on it.
+    """
+    try:
+        subject_mask, _fraction = cv_utils.estimate_subject_mask(bgr)
+        card = cv_utils.find_reference_card(bgr, subject_mask)
+    except Exception:                  # pragma: no cover - never block on this
+        return None
+    if card is None:
+        return None
+
+    x, y, w, h = card["bbox"]
+    scale = work_shape[1] / float(bgr.shape[1]) if bgr.shape[1] else 1.0
+    return [int(x * scale), int(y * scale),
+            int(w * scale), int(h * scale)]
+
+
+def _inside(line: dict, region: list[int]) -> bool:
+    """Wholly within, not merely overlapping.
+
+    A watermark that straddles the card's edge is not printing on the card, and
+    treating it as such would hand anyone a way to place a mark half-on a card
+    and have it ignored.
+    """
+    lx, ly, lw, lh = line["bbox"]
+    rx, ry, rw, rh = region
+    return (lx >= rx and ly >= ry
+            and lx + lw <= rx + rw and ly + lh <= ry + rh)
 
 
 def detect_overlay(bgr: np.ndarray) -> InputRejection | None:
@@ -256,6 +303,30 @@ def detect_overlay(bgr: np.ndarray) -> InputRejection | None:
     ]
     if not written:
         return None
+
+    # -- printing on the reference card is not a watermark --------------------
+    # The capture instructions ASK for a card in the frame, and real cards
+    # carry printed markings: a size, a grey value, a manufacturer's name. A
+    # gate that refuses the workflow the product recommends is a gate that gets
+    # switched off, so text lying wholly within a detected card is exempt.
+    #
+    # The exemption is bounded by the card detector's own limits rather than by
+    # anything decided here: a card may cover at most
+    # cv_utils.REFERENCE_MAX_AREA_FRAC of the frame, must be neutral, flat and
+    # beside the subject rather than on it. A watermark that happens to fall
+    # entirely inside that region WOULD be exempted, and that is the price of
+    # not refusing every carded capture. Anything outside it still rejects.
+    #
+    # Only paid for when there is something to exempt, so an ordinary capture
+    # never runs the card detector twice.
+    exempted = 0
+    card_region = _reference_card_region(bgr, work.shape[:2])
+    if card_region is not None:
+        kept = [ln for ln in written if not _inside(ln, card_region)]
+        exempted = len(written) - len(kept)
+        written = kept
+        if not written:
+            return None
 
     written.sort(key=lambda ln: -ln["glyphs"])
     return InputRejection(
@@ -272,7 +343,9 @@ def detect_overlay(bgr: np.ndarray) -> InputRejection | None:
             "upload a picture taken from a website, a messaging app, a "
             "textbook or a previous report."
         ),
-        evidence={"text_lines": written[:4], "lines_found": len(lines)},
+        evidence={"text_lines": written[:4], "lines_found": len(lines),
+                  "reference_card": card_region,
+                  "lines_on_the_card": exempted},
     )
 
 
