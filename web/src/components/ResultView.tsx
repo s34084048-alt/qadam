@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useI18n } from '../i18n'
-import type { Analysis, ColourCalibration } from '../types'
+import type { Analysis, ColourCalibration, SubjectCheck } from '../types'
 
 const GRADE_VAR: Record<string, string> = {
   no_flag: 'var(--grade-no_flag)',
@@ -188,11 +188,56 @@ export function EvidencePanel({ analysis }: { analysis: Analysis }) {
  *  them derived from pixels, is how a reader ends up acting on the wrong one. */
 export function NextStep({ analysis }: { analysis: Analysis }) {
   const { t } = useI18n()
+  // Withheld by the backend when the measured region does not read as skin.
+  // Styled as a caveat rather than a recommendation: the same text set in the
+  // same grey as an ordinary next step is read as an ordinary next step.
+  const withheld = subjectCheck(analysis) !== null
   return (
     <section className="card">
       <h2>{t('result.imageOnly')}</h2>
       <p className="hint">{t('result.imageOnlyHint')}</p>
-      <p className="hint">{analysis.triage.next_investigation}</p>
+      <p className={withheld ? 'caveat' : 'hint'}>
+        {analysis.triage.next_investigation}
+      </p>
+    </section>
+  )
+}
+
+/** Reads the not-skin finding, or null. It is stored on `features` by the
+ *  backend, which is also what the API serialises — so this needs no new
+ *  field and works on an analysis recorded before this component existed. */
+export function subjectCheck(analysis: Analysis): SubjectCheck | null {
+  const raw = analysis.features?.subject_check
+  if (!raw || typeof raw !== 'object') return null
+  const check = raw as Partial<SubjectCheck>
+  return typeof check.warning === 'string' ? (check as SubjectCheck) : null
+}
+
+/** "Basis for this grade".
+ *
+ *  The not-skin warning says every measurement on the page is meaningless.
+ *  It used to sit as bullet one of the same list as "the measured areas reach
+ *  the urgent threshold" and "visible tissue breakdown meets the urgent
+ *  threshold" — three peers, in list order, with nothing saying which one
+ *  governs the others. It governs all of them, so it is lifted out and the
+ *  list below no longer repeats it. */
+export function BasisForGrade({ analysis }: { analysis: Analysis }) {
+  const { t } = useI18n()
+  const check = subjectCheck(analysis)
+  const rest = analysis.triage.rationale.filter((line) => line !== check?.warning)
+  return (
+    <section className="card">
+      <h2>{t('result.rationale')}</h2>
+      {check && (
+        <div className="caveat" style={{ marginBottom: '.75rem' }}>
+          <strong>{t('result.subjectCheck')}</strong>
+          <p style={{ margin: '.35rem 0 0' }}>{check.warning}</p>
+          <p style={{ margin: '.35rem 0 0' }}>{check.advice}</p>
+        </div>
+      )}
+      <ul className="plain">
+        {rest.map((line) => <li key={line}>{line}</li>)}
+      </ul>
     </section>
   )
 }
@@ -238,6 +283,7 @@ export function LesionList({ analysis }: { analysis: Analysis }) {
           <thead>
             <tr>
               <th>{t('result.findings')}</th>
+              <th>{t('result.role')}</th>
               <th>{t('result.area')}</th>
               <th>{t('result.severity')}</th>
               <th />
@@ -255,6 +301,9 @@ export function LesionList({ analysis }: { analysis: Analysis }) {
                 return (
                   <tr key={lesion.id}>
                     <td>{lesion.kind.replace(/_/g, ' ')}</td>
+                    <td className={lesion.role === 'artifact' ? 'role-artifact' : ''}>
+                      {t(`result.role.${lesion.role}`)}
+                    </td>
                     <td>{lesion.area_pct.toFixed(1)}%</td>
                     <td>{lesion.severity.toFixed(2)}</td>
                     <td className="hint">{firstOfKind ? lesion.description : ''}</td>
@@ -515,12 +564,7 @@ export function ResultView({ analysis, caseId }: { analysis: Analysis; caseId: s
       <OverlayImage analysis={analysis} />
       <LesionList analysis={analysis} />
 
-      <section className="card">
-        <h2>{t('result.rationale')}</h2>
-        <ul className="plain">
-          {analysis.triage.rationale.map((line) => <li key={line}>{line}</li>)}
-        </ul>
-      </section>
+      <BasisForGrade analysis={analysis} />
 
       <ClarifyingQuestions analysis={analysis} />
       <ClinicalPanel analysis={analysis} />

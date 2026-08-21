@@ -8,6 +8,7 @@ from fastapi import APIRouter, File, Query, Response, UploadFile
 from sqlalchemy import delete, func, select
 
 from .. import audit
+from ..analysis import lesion_role
 from ..analysis.modules_config import GRADE_STYLE, MODULES
 from ..analysis.pipeline import AnalysisJob, UnreadableImage
 from ..analysis.runner import get_runner
@@ -128,6 +129,10 @@ def _build_analysis_out(
                 severity=les.severity, bbox=les.bbox_json,
                 centroid=les.centroid_json,
                 description=detail.get("descriptions", {}).get(les.kind, ""),
+                # Same call the overlay makes. A row that says "31.3%" without
+                # saying the pipeline already read that region as an artifact
+                # is the number without the finding.
+                role=lesion_role.role_for(les.kind, detail.get("features", {})),
             )
             for les in lesions
         ],
@@ -830,6 +835,8 @@ async def case_summary_pdf(
                 "area_pct": les.area_pct,
                 "severity": les.severity,
                 "description": detail.get("descriptions", {}).get(les.kind, ""),
+                "role": lesion_role.role_for(
+                    les.kind, detail.get("features", {})),
             }
             for les in lesions
         ],

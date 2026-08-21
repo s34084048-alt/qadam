@@ -6,6 +6,7 @@ was NOT assessed, the routing decision, and the confirmation requirement.
 
 from __future__ import annotations
 
+from .analysis import lesion_role
 from .analysis.modules_config import MODULES
 from .analysis.types import Grade, ModuleResult, QualityReport
 from .safety import (
@@ -45,16 +46,24 @@ def build_summary(
     lines.append("")
 
     lines.append("RECOMMENDED NEXT INVESTIGATION")
-    lines.append(f"  Timeframe: {triage.urgency}")
-    lines.append(f"  Route to: {triage.routing_target}")
+    # Both are empty when the instruction was withheld -- see
+    # backends/classical._withhold_the_instruction. Printing "Timeframe:" with
+    # nothing after it reads as a missing value rather than a withheld one, and
+    # the sentence below says which it is.
+    if triage.urgency:
+        lines.append(f"  Timeframe: {triage.urgency}")
+    if triage.routing_target:
+        lines.append(f"  Route to: {triage.routing_target}")
     lines.append(f"  {triage.next_investigation}")
     lines.append("")
 
     lines.append("VISIBLE SURFACE FINDINGS")
     if result.lesions:
         for lesion in result.lesions:
+            role = lesion_role.role_for(lesion.kind, result.features)
             lines.append(
-                f"  - {lesion.kind.replace('_', ' ')}: {lesion.area_pct:.1f}% of "
+                f"  - {lesion.kind.replace('_', ' ')} "
+                f"[{lesion_role.ROLE_LABEL[role]}]: {lesion.area_pct:.1f}% of "
                 f"the imaged region, severity {lesion.severity:.2f}"
                 + (f" — {lesion.description}" if lesion.description else "")
             )

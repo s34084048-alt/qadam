@@ -111,6 +111,25 @@ def _triage(
     )
 
 
+def _withhold_the_instruction(triage: Triage, unexpected: dict) -> None:
+    """Strip the recommended next investigation, keeping the grade.
+
+    `urgency` and `routing_target` go with it: a timeframe and a destination
+    ARE the instruction, and leaving them while blanking the sentence would
+    read as a referral with the reason missing. Empty is the honest value, and
+    every renderer skips an empty one rather than printing a blank label.
+    """
+    triage.urgency = ""
+    triage.routing_target = ""
+    triage.next_investigation = (
+        "NO NEXT INVESTIGATION IS ISSUED FROM THIS IMAGE. The measured region "
+        "does not read as skin, so the measurements one would be chosen from "
+        "cannot be relied on. The grade above is what the PIXELS support; it "
+        "has NOT been lowered, and it is not a statement about a patient. "
+        + unexpected["advice"]
+    )
+
+
 def _lesions_from(
     mask: np.ndarray,
     subject_area: float,
@@ -227,6 +246,27 @@ class ClassicalCVBackend:
                     "green cloth or paper under the foot — filling about half "
                     "the frame with the sole, in even indirect light.",
                 )
+
+            # THE OTHER HALF OF THE SAME PROBLEM.
+            #
+            # Refusing only NO_FLAG was the right first call: a false
+            # reassurance is the worst thing this platform can emit, and a
+            # detected flag must never be suppressed. The reasoning recorded
+            # above for keeping review/urgent was that a photograph of a desk
+            # then becomes "visible nonsense rather than a clinical decision".
+            #
+            # It did not. A non-foot image graded REVIEW and the result page
+            # read: "Book a podiatry or diabetic foot clinic assessment within
+            # one week. Request perfusion assessment (pulses, ABPI or toe
+            # pressures) and neuropathy testing." That is an instruction a user
+            # can carry out, with a timeframe and three named tests, chosen
+            # from measurements the same page calls meaningless.
+            #
+            # So the GRADE stays -- it is what the pixels support and
+            # suppressing it would hide a finding -- and the INSTRUCTION is
+            # withheld. Nothing is lowered, nothing is hidden, and no next step
+            # is issued from a region that does not read as skin.
+            _withhold_the_instruction(result.triage, unexpected)
         result.model_version = f"{self.name}-{self.version}"
         result.backend = self.backend_id
         return result

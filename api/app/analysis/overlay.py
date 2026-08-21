@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 
 from ..safety import DEVICE_NOTICE, DISCLAIMER
+from . import lesion_role
 from .modules_config import GRADE_STYLE
 from .types import Lesion, QualityReport, Triage
 
@@ -85,20 +86,26 @@ UNCERTAIN_YELLOW = (40, 190, 235)
 ARTIFACT_BLUE = (220, 150, 40)
 
 
+ROLE_COLOR = {
+    lesion_role.POSSIBLE_WOUND: WOUND_RED,
+    lesion_role.UNCERTAIN: UNCERTAIN_YELLOW,
+    lesion_role.ARTIFACT: ARTIFACT_BLUE,
+}
+
+
 def _role_color(kind: str, features: dict) -> tuple[int, int, int]:
-    """Colour a per-feature box by what its character verdict makes of it, so a
-    shadow reads BLUE and a slough bed reads RED even though both are 'a mask'."""
-    dv = (features.get("dark_area_character") or {}).get("verdict")
-    yv = (features.get("yellow_area_character") or {}).get("verdict")
-    if kind == "dark_area":
-        return {"tissue_like": WOUND_RED,
-                "shadow_like": ARTIFACT_BLUE}.get(dv, UNCERTAIN_YELLOW)
-    if kind == "tissue_breakdown":
-        return {"slough_like": WOUND_RED,
-                "callus_like": ARTIFACT_BLUE}.get(yv, UNCERTAIN_YELLOW)
-    if kind == "erythema":
-        return UNCERTAIN_YELLOW
-    return KIND_COLOR.get(kind, DEFAULT_COLOR)
+    """Colour a per-feature box by its role, so a shadow reads BLUE and a
+    slough bed reads RED even though both are 'a mask'.
+
+    The role decision itself is NOT made here. It lives in `lesion_role`
+    because the findings table needs the same answer, and when this function
+    owned the rule the table could not reach it -- so it rendered a region
+    already classified as an artifact as a bare measurement. A renderer is the
+    wrong place for a claim about what the pixels mean.
+    """
+    if kind not in lesion_role.CLASSIFIED_KINDS:
+        return KIND_COLOR.get(kind, DEFAULT_COLOR)
+    return ROLE_COLOR[lesion_role.role_for(kind, features)]
 
 
 def render_overlay(
@@ -132,20 +139,16 @@ def render_overlay(
     # quality) or drew no wound box at all, a feature box may not stay RED
     # "possible wound" — that is exactly the guard the overlay would otherwise
     # visually undo.
-    wl_class = (features.get("wound_localization") or {}).get("classification")
-    wound_confirmed = wl_class == "confirmed_possible_wound"
-
     # Per-feature boxes, coloured by role: RED tissue disruption, YELLOW
     # unresolved, BLUE shadow/callus/artifact. Drawn thin, because the wound
     # boundary below is the primary annotation.
     for lesion in lesions:
         color = _role_color(lesion.kind, features)
-        if color == WOUND_RED and not wound_confirmed:
-            color = UNCERTAIN_YELLOW      # never over-claim past localisation
         x, y, bw, bh = lesion.bbox
         cv2.rectangle(img, (x, y), (x + bw, y + bh), color, max(1, thin))
-        tag = "artifact" if color == ARTIFACT_BLUE else (
-            "possible wound" if color == WOUND_RED else "uncertain")
+        # The same role the findings table shows. Reading it back out of the
+        # colour, as this once did, meant the two could drift apart silently.
+        tag = lesion_role.ROLE_LABEL[lesion_role.role_for(lesion.kind, features)]
         label = _ascii(
             f"{KIND_LABEL.get(lesion.kind, lesion.kind)} [{tag}] "
             f"{lesion.area_pct:.1f}%"

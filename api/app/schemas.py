@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .analysis import lesion_role
+
 Grade = Literal["no_flag", "monitor", "review", "urgent"]
 ModuleId = Literal["foot", "lab"]
 
@@ -95,6 +97,13 @@ class LesionOut(BaseModel):
     bbox: dict[str, int]
     centroid: dict[str, int]
     description: str = ""
+    # What the pipeline made of this region: "artifact" (explicitly not a
+    # wound), "uncertain", or "possible_wound". The annotated image has always
+    # carried it; the table that repeats the same numbers did not, and a
+    # skimmed table is where a bare "31.3%" gets believed. Derived, not stored:
+    # it is a reading of `features`, and an old row re-serialised today gets
+    # today's rule rather than a stale copy of an older one.
+    role: str = lesion_role.UNCERTAIN
 
 
 class TriageOut(BaseModel):

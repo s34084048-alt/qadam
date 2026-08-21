@@ -57,6 +57,8 @@ export interface Quality {
   hints: string[]
 }
 
+export type LesionRole = 'artifact' | 'uncertain' | 'possible_wound'
+
 export interface LesionOut {
   id: string
   kind: string
@@ -65,6 +67,19 @@ export interface LesionOut {
   bbox: { x: number; y: number; w: number; h: number }
   centroid: { x: number; y: number }
   description: string
+  /** What the pipeline made of this region. The annotated image has always
+   *  burned this in; the table repeating the same numbers did not, so a
+   *  region already classified as NOT a wound rendered as a bare percentage. */
+  role: LesionRole
+}
+
+/** Present only when the measured region did not read as skin. Its warning
+ *  invalidates every measurement on the page, so it is never rendered as one
+ *  bullet among the others. */
+export interface SubjectCheck {
+  looks_like_skin: false
+  warning: string
+  advice: string
 }
 
 export interface ConfidenceAdjustment {

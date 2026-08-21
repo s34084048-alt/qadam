@@ -28,6 +28,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from .analysis import lesion_role
 from .analysis.modules_config import GRADE_STYLE, MODULES
 from .safety import (
     DEVICE_NOTICE,
@@ -186,10 +187,14 @@ def build_case_pdf(
         flow.append(Spacer(1, 8))
 
         flow.append(Paragraph("Recommended next investigation", S_H))
-        flow.append(_kv_table([
-            ("Timeframe", triage["urgency"]),
-            ("Route to", triage["routing_target"]),
-        ]))
+        # Empty when the instruction was withheld: a blank "Timeframe" row
+        # reads as a value that failed to load, not as one deliberately not
+        # issued. The paragraph below carries the reason.
+        rows = [(label, triage[key]) for label, key in
+                (("Timeframe", "urgency"), ("Route to", "routing_target"))
+                if triage.get(key)]
+        if rows:
+            flow.append(_kv_table(rows))
         flow.append(Spacer(1, 4))
         flow.append(Paragraph(triage["next_investigation"], S_BODY))
 
@@ -225,8 +230,14 @@ def build_case_pdf(
                  Paragraph("<b>Severity</b>", S_SMALL),
                  Paragraph("<b>Description</b>", S_SMALL)]]
         for les in lesions:
+            # The role belongs beside the kind, not in a column that can be
+            # cropped off: a PDF page is forwarded on its own.
+            role = les.get("role")
+            kind = les["kind"].replace("_", " ")
             data.append([
-                Paragraph(les["kind"].replace("_", " "), S_SMALL),
+                Paragraph(
+                    f"{kind} [{lesion_role.ROLE_LABEL.get(role, role)}]"
+                    if role else kind, S_SMALL),
                 Paragraph(f"{les['area_pct']:.1f}", S_SMALL),
                 Paragraph(f"{les['severity']:.2f}", S_SMALL),
                 Paragraph(les.get("description", ""), S_SMALL),

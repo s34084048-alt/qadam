@@ -309,6 +309,11 @@ const en: Dict = {
   'case.photoRecord': 'The photograph — record, not decision',
   'case.photoRecordHint':
     'What the camera measured, kept so the wound can be compared over time. It is not the routing decision above and takes no part in it.',
+  'result.role': 'Read as',
+  'result.role.artifact': 'not a wound',
+  'result.role.uncertain': 'unresolved',
+  'result.role.possible_wound': 'possible wound',
+  'result.subjectCheck': 'This invalidates every measurement below',
   'result.observationOnly': 'OBSERVED IN THE PHOTOGRAPH — NOT THE ROUTING DECISION',
   'result.imageOnly': 'What the image alone would suggest',
   'result.imageOnlyHint':
@@ -761,6 +766,11 @@ const ar: Dict = {
   'case.photoRecord': 'الصورة — سجل، وليست قراراً',
   'case.photoRecordHint':
     'ما قاسته الكاميرا، محفوظ لتتبّع الجرح عبر الزمن. ليست قرار التوجيه أعلاه ولا تشارك فيه.',
+  'result.role': 'يُقرأ على أنه',
+  'result.role.artifact': 'ليس جرحًا',
+  'result.role.uncertain': 'غير محسوم',
+  'result.role.possible_wound': 'جرح محتمل',
+  'result.subjectCheck': 'هذا يُبطل كل قياس أدناه',
   'result.observationOnly': 'مُلاحَظ في الصورة — ليس قرار التوجيه',
   'result.imageOnly': 'ما قد توحي به الصورة وحدها',
   'result.imageOnlyHint':
