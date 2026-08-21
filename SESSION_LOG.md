@@ -10,6 +10,77 @@ that motivated it.
 
 ---
 
+## 2026-08 — Three defects one photograph exposed
+
+One commit on `claude/product-progress-simple-laptop-j5r127`. Test suite:
+**512 passing, 0 failing** (499 before). Frontend typecheck clean.
+
+### `7991f81` — What the mechanisms found did not reach the reader
+
+**Where this came from.** Three field runs on a phone, against the deployed
+build: a healthy foot, a real ulcerated diabetic foot, and a photograph that
+was not a foot at all. The third exposed all three defects at once, and it is
+worth stating plainly what it did NOT expose: every safety mechanism fired
+correctly. The skin check caught a non-foot image. The prerequisites gate
+dropped evidence strength to 0.20. Wound localisation classified the regions
+as artifacts. Not one of those findings reached the part of the page a reader
+reads.
+
+**1. A non-foot image issued a clinical instruction.** The page recommended a
+podiatry assessment within one week with three named investigations, three
+cards above its own sentence saying every measurement on it was meaningless.
+
+The narrow refusal in `aea514c` covers the reassuring direction only —
+`NO_FLAG` from a non-skin region is refused outright, review/urgent are
+surfaced. That asymmetry is right and is unchanged. Its recorded justification
+was that a photograph of a desk becomes *"visible nonsense rather than a
+clinical decision"*; a one-week referral with named tests is a clinical
+decision. So the grade is kept and the instruction is withheld, `urgency` and
+`routing_target` with it — a timeframe and a destination **are** the
+instruction. `summary.py` and `pdf.py` now skip an empty label rather than
+printing `Timeframe:` with nothing after it.
+
+**2. The role was dropped by every surface except the picture.** The overlay
+read `tissue breakdown [artifact] 31.3%`; the findings table read
+`tissue breakdown | 31.3% | 1.00`. The rule lived in a private helper inside
+the renderer, so only the renderer could apply it. It is now
+`analysis/lesion_role.py`, and the overlay colour, `LesionOut.role`, the PDF
+table and the summary text all ask it — the agreement is what the tests
+assert, not one copy of the rule. Derived at serialisation from `features`,
+not stored: no migration, and an older analysis re-read today gets today's
+rule instead of a stale copy.
+
+**3. The not-skin warning was a peer bullet.** "Basis for this grade" listed
+*"every measurement below is meaningless"*, *"the measured areas reach the
+urgent threshold"* and *"visible tissue breakdown meets the urgent threshold"*
+as three items of one list. The first governs the other two. It is lifted
+above the list and no longer repeated inside it.
+
+**Notes for a future reader.**
+- `UNCERTAIN` is the default for every kind with no positive verdict,
+  including kinds this pipeline does not characterise. Defaulting to
+  `ARTIFACT` would dismiss a finding on no evidence; `POSSIBLE_WOUND` would
+  assert one. Neither is a reading of the image.
+- The over-claim guard (a box may never claim more than localisation
+  confirmed) moved into `lesion_role` with the rest of the rule. The wound
+  boundary box in `render_overlay` computes its own `confirmed` locally and
+  was not touched.
+- Six of the thirteen new tests fail against the unfixed code. The rest are
+  narrowness guards and pass either way by design — a test that the grade is
+  not quietly downgraded has nothing to fail against.
+
+**Not fixed, deliberately.** `severity` is `area_pct / severity_ref` clipped
+to `[0.05, 1.00]`, with `severity_ref` of 12.0 / 8.0 / 30.0 chosen the same
+way the old `severity_index` weights were. On this run both regions saturated
+at **1.00** and every value on the earlier ulcer run was the **0.05 floor** —
+in neither case a measurement. It is not independent information: it is area
+divided by a guess. This is the same defect `19fe436` removed `severity_index`
+for, and like that one it is a decision about what to publish rather than a
+bug to patch. Left standing and recorded here so the next session does not
+rediscover it.
+
+---
+
 ## 2026-08 — Scoring integrity and two latent defects
 
 Four commits on `claude/recover-session-2-remove-burden-fezrok`. Test suite:
@@ -148,5 +219,14 @@ Recorded because they shaped what was *not* done as much as what was:
 
 ## Known and deliberately not fixed
 
-Nothing outstanding as of `92bda3b`. Tasks 6 (answer form) and 7 (skin tone) are
-untouched and belong to a future session.
+- **`severity` is area divided by a guessed constant** (`7991f81`). Saturates
+  at 1.00 and floors at 0.05; both were observed on real runs. Removing or
+  redesigning it is the same call that was made for `severity_index`, and it
+  needs data rather than better constants.
+- **The findings table and the "observed" text report different quantities**
+  under the same label — the text totals the whole mask, the table lists the
+  largest three blobs above 0.15%. Not a bug; nothing on the page says which
+  is which. Observed as 5.1% vs 2.5%+1.9% on a field run.
+
+Tasks 6 (answer form) and 7 (skin tone) are untouched and belong to a future
+session.
