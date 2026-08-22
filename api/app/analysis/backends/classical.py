@@ -529,6 +529,24 @@ class ClassicalCVBackend:
         dark = cv_utils.clean_binary(dark, min_dim)
         slough = cv_utils.clean_binary(slough, min_dim)
 
+        # THE BACKDROP IS NOT THE PATIENT.
+        #
+        # This module asks the user to shoot on a blue or green cloth, and on a
+        # close-up whose foot ran off the frame edges it then scored that cloth
+        # as 33% "dark area" and as tissue breakdown, with a red POSSIBLE WOUND
+        # box drawn on it. `subject` is the whole frame in that case -- the
+        # wideners put it there deliberately and correctly -- so the exclusion
+        # cannot live in the mask. It lives here, per feature region, behind
+        # two guards that keep an interior wound and a fluorescent-lit foot
+        # safe. See cv_utils.drop_backdrop_regions.
+        backdrop: list[dict] = []
+        for name, m in (("erythema", erythema), ("dark_area", dark),
+                        ("tissue_breakdown", slough)):
+            cleaned, gone = cv_utils.drop_backdrop_regions(m, a, b, subject)
+            m[:] = cleaned
+            for entry in gone:
+                backdrop.append({"kind": name, **entry})
+
         # Discard thin dark structures: skin creases, the gap between toes and
         # the line under a nail are all long and narrow, and none of them is a
         # lesion.
@@ -608,6 +626,17 @@ class ClassicalCVBackend:
             f"Apparent tissue breakdown covers {brk_pct:.1f}%.",
             f"Area markedly darker than surrounding skin covers {dark_pct:.1f}%.",
         ]
+        if backdrop:
+            # Stated, not silent. A region that vanished between the pixels and
+            # the percentage has to be visible to a reader, along with the one
+            # thing that makes it not vanish: getting the foot fully in frame.
+            px = sum(int(entry["area_px"]) for entry in backdrop)
+            rationale.insert(0,
+                f"{len(backdrop)} region(s) reaching the edge of the frame did "
+                f"not read as skin and were excluded as backdrop rather than "
+                f"measured as findings ({px / max(1.0, subject_area) * 100:.1f}% "
+                f"of the imaged region). Re-take with the whole foot inside the "
+                f"frame if any of it was part of the foot.")
         if dark_pct > 0:
             rationale.append(
                 "A DARK AREA IS NOT A DIAGNOSIS OF NECROSIS. Shadow, bruising "
@@ -743,6 +772,11 @@ class ClassicalCVBackend:
                 "erythema_pct": round(ery_pct, 3),
                 "breakdown_pct": round(brk_pct, 3),
                 "dark_area_pct": round(dark_pct, 3),
+                # Regions excluded as backdrop rather than patient. Recorded
+                # because a measurement that silently shrank is worse than one
+                # that is wrong: a reader has to be able to see that something
+                # was removed, and how much.
+                "backdrop_excluded": backdrop,
                 "subject_L_median": round(L_med, 2),
                 # Needed to turn a percentage into cm² once a size reference
                 # exists. Without it the percentages cannot be compared

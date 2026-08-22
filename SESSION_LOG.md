@@ -10,6 +10,81 @@ that motivated it.
 
 ---
 
+## 2026-08 — The recommended backdrop was being scored as a finding
+
+One commit on `claude/product-progress-simple-laptop-j5r127`. Test suite:
+**518 passing, 0 failing** (512 before). Frontend typecheck clean.
+
+### The failure
+
+A field close-up of a real ulcerated foot on a blue cloth graded URGENT, and
+the grade was substantially right. The annotated image was not: a red
+**POSSIBLE WOUND** box was drawn on the cloth, two `tissue breakdown` boxes sat
+on the fabric, and the real ulcer was boxed as *erythema* rather than tissue
+breakdown. The `6.0%` behind the urgent bullet was largely backdrop pixels.
+
+Reproduced synthetically. On a close-up where the foot **runs off the frame
+edges** — which is what a good close-up looks like — the border band that
+`estimate_subject_mask` models the background from is itself mostly skin.
+Everything then inverts: the reproduction's mask came back **99.9%
+background**, and the cloth was measured as a `dark_area` covering 33.1% of
+the imaged region.
+
+### Why the fix is not in the mask
+
+The wideners are not broken and were not changed. `_widen_if_the_lesion_became_
+the_subject` detected this correctly and fell back to the whole frame, which is
+right — a stable, interpretable denominator beats an arbitrary fragment. The
+defect is downstream: with the whole frame as the subject, the backdrop is
+inside it, and the feature masks scored it.
+
+So the exclusion is per feature region, in `_foot`, via
+`cv_utils.drop_backdrop_regions`.
+
+### The two guards, and why neither is optional
+
+A wound bed, an eschar and a bruise are not skin-coloured either, so "not
+skin" alone would delete the finding this module exists to report.
+
+1. **The region touches the frame edge.** A backdrop reaches the edge; a
+   lesion on a foot that is fully in frame does not. This is the same
+   protection `estimate_subject_mask` already gives by filling interior holes.
+2. **The rest of the subject reads as skin.** Light skin under a cool
+   fluorescent tube measures a\* and b\* NEGATIVE — the exact failure
+   `looks_like_skin` was rewritten to avoid. Under that lamp a real foot's own
+   regions could satisfy guard 1 and fail the skin test both. But under that
+   lamp *nothing* in frame reads as skin, so the rule disables itself entirely.
+
+Both guards have their own test, in the direction that hides things.
+
+### What it moved
+
+**Nothing, on every real fixture.** `foot_clean`, `foot_shadow_only`,
+`foot_dark_area` and `foot_urgent` come back with the identical grade,
+confidence and all three percentages — the values recorded above for
+`92bda3b`, asserted numerically by `test_backdrop_exclusion.py` so a future
+change cannot move them quietly. The concern that "every percentage on every
+image will change" was wrong: the rule fires only on the failure case.
+
+**Notes for a future reader.**
+- No new constant was introduced. The rule reuses `looks_like_skin`, whose
+  thresholds already carry their own justification, rather than adding a
+  "blueness" cut that would need defending on its own.
+- The reference for guard 2 is the subject MINUS the feature. Including the
+  feature would let a large backdrop region drag the very test meant to
+  exclude it.
+- Every excluded region is recorded on `features.backdrop_excluded` and stated
+  on the page. A measurement that silently shrank is worse than one that is
+  wrong — the reader has to see that something was removed, and how much.
+- The exclusion note is lifted above the basis list rather than placed in it,
+  for the reason the not-skin warning was: it explains why the numbers below
+  are smaller than the pixels, so it cannot be one of them.
+- **Not addressed:** in the field image the real ulcer was labelled `erythema`
+  rather than `tissue_breakdown`. That is a detection question, not a masking
+  one, and it is untouched here.
+
+---
+
 ## 2026-08 — Three defects one photograph exposed
 
 One commit on `claude/product-progress-simple-laptop-j5r127`. Test suite:

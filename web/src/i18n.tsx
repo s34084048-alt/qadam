@@ -314,6 +314,7 @@ const en: Dict = {
   'result.role.uncertain': 'unresolved',
   'result.role.possible_wound': 'possible wound',
   'result.subjectCheck': 'This invalidates every measurement below',
+  'result.backdropExcluded': 'Part of the frame was excluded before measuring',
   'result.observationOnly': 'OBSERVED IN THE PHOTOGRAPH — NOT THE ROUTING DECISION',
   'result.imageOnly': 'What the image alone would suggest',
   'result.imageOnlyHint':
@@ -771,6 +772,7 @@ const ar: Dict = {
   'result.role.uncertain': 'غير محسوم',
   'result.role.possible_wound': 'جرح محتمل',
   'result.subjectCheck': 'هذا يُبطل كل قياس أدناه',
+  'result.backdropExcluded': 'استُبعد جزء من الإطار قبل القياس',
   'result.observationOnly': 'مُلاحَظ في الصورة — ليس قرار التوجيه',
   'result.imageOnly': 'ما قد توحي به الصورة وحدها',
   'result.imageOnlyHint':

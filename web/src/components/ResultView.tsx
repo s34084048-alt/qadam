@@ -221,10 +221,21 @@ export function subjectCheck(analysis: Analysis): SubjectCheck | null {
  *  threshold" — three peers, in list order, with nothing saying which one
  *  governs the others. It governs all of them, so it is lifted out and the
  *  list below no longer repeats it. */
+/** The backdrop-exclusion line, or null. Written into the rationale by the
+ *  backend so every output carries it; lifted out here for the same reason the
+ *  not-skin warning is — it explains why the numbers below are smaller than
+ *  the pixels, so it cannot be one of them. */
+function backdropNote(analysis: Analysis): string | null {
+  return analysis.triage.rationale.find(
+    (line) => line.includes('excluded as backdrop')) ?? null
+}
+
 export function BasisForGrade({ analysis }: { analysis: Analysis }) {
   const { t } = useI18n()
   const check = subjectCheck(analysis)
-  const rest = analysis.triage.rationale.filter((line) => line !== check?.warning)
+  const backdrop = backdropNote(analysis)
+  const rest = analysis.triage.rationale.filter(
+    (line) => line !== check?.warning && line !== backdrop)
   return (
     <section className="card">
       <h2>{t('result.rationale')}</h2>
@@ -233,6 +244,12 @@ export function BasisForGrade({ analysis }: { analysis: Analysis }) {
           <strong>{t('result.subjectCheck')}</strong>
           <p style={{ margin: '.35rem 0 0' }}>{check.warning}</p>
           <p style={{ margin: '.35rem 0 0' }}>{check.advice}</p>
+        </div>
+      )}
+      {backdrop && (
+        <div className="limitations" style={{ marginBottom: '.75rem' }}>
+          <strong>{t('result.backdropExcluded')}</strong>
+          <p style={{ margin: '.35rem 0 0' }}>{backdrop}</p>
         </div>
       )}
       <ul className="plain">

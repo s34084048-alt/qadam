@@ -183,6 +183,82 @@ def drop_thin_structures(mask: np.ndarray, min_radius: float) -> np.ndarray:
     return keep
 
 
+def drop_backdrop_regions(
+    feature: np.ndarray, a: np.ndarray, b: np.ndarray, subject: np.ndarray,
+) -> tuple[np.ndarray, list[dict]]:
+    """Drop feature regions that are the BACKDROP, not the patient.
+
+    THE FIELD FAILURE THIS PINS
+    ---------------------------
+    QADAM tells the user to photograph the foot on a blue or green cloth --
+    that advice is in `_widen_if_the_segmentation_split_skin` and in the
+    capture guidance, and it is good advice. Then, on a close-up where the
+    foot ran off the frame edges, the border-colour model in
+    `estimate_subject_mask` had a border made mostly of SKIN, the wideners
+    correctly fell back to the whole frame, and the recommended blue cloth was
+    scored as 33% "dark area" and as "tissue breakdown". A red POSSIBLE WOUND
+    box was drawn on the cloth.
+
+    THE TWO GUARDS, AND WHY EACH IS NEEDED
+    --------------------------------------
+    A wound bed, an eschar and a bruise are not skin-coloured either, so "not
+    skin" ALONE would delete the finding this module exists to report. Two
+    conditions narrow it to the backdrop:
+
+    1. THE REGION TOUCHES THE IMAGE BORDER. A backdrop reaches the frame edge;
+       a lesion on a foot that is fully in frame does not. This is what keeps
+       an interior eschar safe -- it is the same protection
+       `estimate_subject_mask` gives by filling interior holes.
+
+    2. THE REST OF THE SUBJECT READS AS SKIN. This is the fluorescent-light
+       guard, and it matters more than it looks. Light skin under a cool tube
+       measures a* and b* NEGATIVE (see `looks_like_skin`), so under that lamp
+       a real foot's own regions could satisfy guard 1 and the skin test both.
+       But under that lamp NOTHING in frame reads as skin -- so this function
+       disables itself entirely rather than trimming a real foot. It only acts
+       where the image demonstrably contains skin AND something that is not.
+
+    Nothing is deleted silently: every dropped region is returned so the caller
+    can report it. Returns `(mask, dropped)`.
+    """
+    dropped: list[dict] = []
+    if not feature.any():
+        return feature, dropped
+
+    # GUARD 2, evaluated once. The reference is the subject MINUS the feature:
+    # including the feature would let a large backdrop region drag the very
+    # test that is meant to exclude it.
+    rest = (subject & (feature == 0)).astype(np.uint8) * 255
+    if (rest > 0).sum() < 500:
+        return feature, dropped
+    rest_is_skin, _ = looks_like_skin(a, b, rest)
+    if not rest_is_skin:
+        return feature, dropped
+
+    h, w = feature.shape[:2]
+    n, labels, stats, _c = cv2.connectedComponentsWithStats(feature, connectivity=8)
+    keep = feature.copy()
+    for label in range(1, n):
+        x, y = stats[label, cv2.CC_STAT_LEFT], stats[label, cv2.CC_STAT_TOP]
+        cw, ch = stats[label, cv2.CC_STAT_WIDTH], stats[label, cv2.CC_STAT_HEIGHT]
+        # GUARD 1.
+        if not (x == 0 or y == 0 or x + cw >= w or y + ch >= h):
+            continue
+        component = (labels == label).astype(np.uint8) * 255
+        if (component > 0).sum() < 100:
+            continue
+        is_skin, stat = looks_like_skin(a, b, component)
+        if is_skin:
+            continue
+        keep[labels == label] = 0
+        dropped.append({
+            "area_px": int((component > 0).sum()),
+            "a_median": stat.get("a_median"),
+            "b_median": stat.get("b_median"),
+        })
+    return keep, dropped
+
+
 def looks_like_skin(a: np.ndarray, b: np.ndarray, mask: np.ndarray) -> tuple[bool, dict]:
     """Is the segmented subject plausibly skin?
 
