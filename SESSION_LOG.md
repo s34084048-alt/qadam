@@ -10,6 +10,100 @@ that motivated it.
 
 ---
 
+## 2026-08 — CORRECTIONS to the three entries below
+
+No code change. Recorded because this file is the reviewer-facing record and
+its standing rule is that nothing is claimed as verified that was not run. Two
+claims below do not meet that bar, and a third is a limitation found after the
+commit that stated the opposite optimism.
+
+### 1. "A photograph that was not a foot" — NOT ESTABLISHED
+
+Commit `7991f81` and the entry *"Three defects one photograph exposed"* both
+describe the run they were built from as a photograph that was **not a foot**.
+That was an inference from two things: the page's own message *"the photographed
+area does not read as skin"*, and this author's reading of a phone screenshot.
+
+A later run on the deployed build produced an identical result — `dark area
+41.3% / 1.00`, `tissue breakdown 31.3% / 1.00`, `erythema 1.3%`, evidence
+`0.20`, REVIEW, and the same three overlay labels — on what was reported as a
+photograph of the ulcerated foot. Two different photographs cannot agree to one
+decimal place across three features, so the earlier image was most likely the
+same foot photograph in a close frame.
+
+**What is actually established is only the weaker statement: the measured
+region did not read as skin.** That is the system's own claim about its own
+measurement, not ground truth about the subject.
+
+**The fix in `7991f81` stands unchanged and needs nothing stronger.** It
+withholds a clinical instruction when the measurements it would be chosen from
+have been declared unreliable — which is exactly the weaker statement. Only the
+description of the evidence was wrong.
+
+It also means the skin check may FALSE-POSITIVE on a real foot in a close
+frame. That is not investigated here and is listed below as outstanding.
+
+### 2. The red-bed test does not fire on the one real ulcer available
+
+Commit `5db8aee` demonstrated `red_region_character` on two synthetic images
+and recorded its constants as guesses. It did not say what it does on real
+data, because at that point there was none. There is now — one photograph of an
+open plantar ulcer — and on it the test returns **`diffuse_like`**. It misses.
+
+Diagnosed, and **the constants are not the cause**:
+
+| region measured | edge | specular | verdict |
+|---|---|---|---|
+| ulcer alone, hand-marked r=40 | **48.8** | **0.041** | `bed_like` |
+| ulcer + surrounding pink skin, r=62 | 11.2 | 0.009 | `diffuse_like` |
+| whole erythema mask | 18.5 | 0.009 | `diffuse_like` |
+| largest erythema blob | 18.9 | 0.010 | `diffuse_like` |
+
+Thresholds are `edge ≥ 25.0` and `specular ≥ 0.012`. On the ulcer itself both
+clear comfortably. The a\* threshold merges the bed with the pink skin around
+it, and the soft outer boundary of that merged region is what gets measured.
+
+The synthetic fixtures were far more extreme than reality — edge **149** where
+a real ulcer gives **48.8** — which is why they passed and hid this.
+
+**Attempted and reverted:** measuring over the region `wound_localization`
+isolated instead of the raw colour mask. Localisation is not on the ulcer
+either — its box is at `x=302` where the ulcer is at `x≈255`, and the overlap
+with the erythema mask is **0 px**. The change was a no-op that added a branch,
+so it was not committed.
+
+**The next step is region delineation, not constant tuning.** Nothing in the
+pipeline currently isolates the wound tightly enough for a boundary test to
+mean anything.
+
+### 3. What the pipeline does on that photograph, for the record
+
+Run locally on the file as supplied, 600×398:
+
+    grade urgent | evidence 0.85 | not-skin=no
+    dark 0.7%  breakdown 6.9%  erythema 13.7%
+    localisation = confirmed_possible_wound
+    ULCER BOXED: YES
+
+So the misses reported from the phone were not reproduced on the image itself.
+The deployed build is several commits behind and its offline queue was jammed
+throughout ("an item was rejected by the server and everything after it is held
+back"), so what it analysed is not known to be what was uploaded. **No
+conclusion about detection should be drawn from those runs**, including the
+favourable ones.
+
+### Outstanding after these corrections
+
+- The skin check may fire on a real foot in a close frame. Suspected from the
+  identical-results finding above; not reproduced under controlled conditions,
+  because an arbitrary crop of the same photograph fails the exposure check
+  before reaching it.
+- `red_region_character` is unvalidated against real data and currently misses
+  the only real case available. It changes no grade, so the cost of the miss is
+  a weaker description, not a weaker safety property.
+
+---
+
 ## 2026-08 — A red wound bed was being reported as "surface redness"
 
 One commit on `claude/product-progress-simple-laptop-j5r127`. Test suite:
@@ -377,6 +471,11 @@ Recorded because they shaped what was *not* done as much as what was:
   at 1.00 and floors at 0.05; both were observed on real runs. Removing or
   redesigning it is the same call that was made for `severity_index`, and it
   needs data rather than better constants.
+- **The skin check may false-positive on a real foot in a close frame.** See
+  the corrections entry at the top of this file. Not reproduced under
+  controlled conditions yet.
+- **`red_region_character` misses the one real ulcer available** — a region
+  problem, not a threshold problem. Measurements in the corrections entry.
 - **The findings table and the "observed" text report different quantities**
   under the same label — the text totals the whole mask, the table lists the
   largest three blobs above 0.15%. Not a bug; nothing on the page says which
