@@ -581,6 +581,15 @@ class ClassicalCVBackend:
         yellow_character = (cv_utils.yellow_region_character(bgr, slough)
                             if brk_pct > 0 else None)
 
+        # A granulating bed is RED, so it lands here rather than in `slough`,
+        # and "surface redness" alone does not distinguish an open wound from
+        # a flush. This says whether the redness is a BOUNDED AREA. It changes
+        # no grade -- erythema stays capped at REVIEW in evidence.py, for the
+        # reason recorded there -- and it names no diagnosis. See
+        # cv_utils.red_region_character.
+        red_character = (cv_utils.red_region_character(bgr, erythema)
+                         if ery_pct > 0 else None)
+
         # WOUND SEGMENTATION, through the model-agnostic provider interface.
         # Today the provider IS the heuristic localiser (unchanged); a future
         # validated model implements the same interface and drops in here with
@@ -708,6 +717,7 @@ class ClassicalCVBackend:
                 "erythema_pct": ery_pct,
                 "dark_area_character": character,
                 "yellow_area_character": yellow_character,
+                "erythema_character": red_character,
                 "dark_coherence": dark_coherence,
                 "breakdown_coherence": brk_coherence,
             },
@@ -789,6 +799,7 @@ class ClassicalCVBackend:
                 "skin_reference": skin_ref,
                 "dark_area_character": character,
                 "yellow_area_character": yellow_character,
+                "erythema_character": red_character,
                 "dark_coherence": dark_coherence,
                 "breakdown_coherence": brk_coherence,
                 # What the pixels were allowed to claim, and why. This is the

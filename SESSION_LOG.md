@@ -10,6 +10,85 @@ that motivated it.
 
 ---
 
+## 2026-08 — A red wound bed was being reported as "surface redness"
+
+One commit on `claude/product-progress-simple-laptop-j5r127`. Test suite:
+**523 passing, 0 failing** (518 before).
+
+### The question this answers
+
+Asked directly, of a field photograph of an open plantar ulcer: *why did it not
+recognise the wound?* It had. The page said `erythema — uncertain — 10.7%`,
+inside a bounding box far larger than the ulcer, and nothing distinguished it
+from a flush.
+
+The cause is structural, not a threshold. This module measures three things:
+
+| feature | rule | i.e. |
+|---|---|---|
+| `erythema` | `a* ≥ a_med + 8` | RED things |
+| `tissue_breakdown` | `b* ≥ b_med + 12` | YELLOW things |
+| `dark_area` | `L ≤ L_med − 55` | DARK things |
+
+A granulating bed is red. `tissue_breakdown` measures **yellowness** — that is
+slough — so it could never have caught it. There is no wound model anywhere in
+the classical backend: three colour buckets, no shape and no texture.
+
+A hypothesis that was checked and is NOT the cause: the backdrop poisoning the
+skin reference. Measured on the reproduction — whole frame `L_med 194.0,
+b_med 10.0` versus foot only `196.0, 12.0`. The median is robust; the reference
+was fine.
+
+### What was added
+
+`cv_utils.red_region_character` — the same two measurements that separate
+slough from callus, one colour axis over: a **margin** (boundary gradient) and
+**moisture** (specular fraction). Verdicts `bed_like` / `diffuse_like` /
+`indeterminate`, mirroring the two character tests that already existed.
+
+Separation on the two synthetic cases it exists for: edge **149.1** and
+specular **0.133** for a bounded wet bed, against **9.1** and **0.0** for a dry
+flush.
+
+### What it deliberately does not do
+
+**It cannot raise the grade.** `evidence._erythema` still returns
+`ceiling=Grade.REVIEW, sufficient_for_urgent=False` for every verdict including
+the strongest, for the reason recorded there: redness in a photograph is a
+colour, and a *bounded* red area is still a colour. None of these measurements
+establishes warmth, infection or depth. `test_erythema_can_never_reach_urgent_
+whatever_the_character_says` asserts it across all four verdict values, and is
+marked in that file as the test that must not be deleted.
+
+The one place the claim moves at all is `lesion_role`: erythema can now read
+`possible_wound` instead of `uncertain` — but only when `bed_like` AND
+localisation independently drew a `confirmed_possible_wound` boundary. Two
+mechanisms must agree before the word "wound" appears next to a red region, and
+the grade is unaffected either way. On `foot_urgent` the character is
+`bed_like` but localisation is only `uncertain_surface_abnormality`, so the
+role stays `uncertain` — the guard holds on the fixture most likely to trip it.
+
+**Notes for a future reader.**
+- `diffuse_like` carries its own limit line, because "no margin" could be read
+  as the all-clear and spreading erythema is itself a red flag a single
+  photograph cannot rule out. Tested.
+- Interior holes are filled before measuring, for the reason
+  `yellow_region_character` documents: a specular highlight is near-white and
+  therefore not red, so the a\* threshold punches every wet spot out of the
+  region — and moisture is the thing being measured. A wetter bed would score
+  as drier.
+- The two constants are copied from the slough test rather than newly fitted.
+  They are guesses, as those are.
+- Fixtures unmoved: `foot_urgent` still `urgent` at `erythema 9.44%` /
+  `breakdown 6.05%`, asserted numerically.
+
+**This is a new detection capability**, which the standing constraints below
+otherwise rule out. It was added at the explicit request of the maintainer,
+after the limitation was demonstrated on a real photograph. It describes; it
+does not grade.
+
+---
+
 ## 2026-08 — The recommended backdrop was being scored as a finding
 
 One commit on `claude/product-progress-simple-laptop-j5r127`. Test suite:

@@ -74,9 +74,20 @@ def role_for(kind: str, features: dict[str, Any] | None) -> str:
     elif kind == "tissue_breakdown":
         role = {"slough_like": POSSIBLE_WOUND,
                 "callus_like": ARTIFACT}.get(yellow, UNCERTAIN)
+    elif kind == "erythema":
+        # A granulating wound bed is RED, so it arrives here rather than in
+        # `tissue_breakdown` -- which measures YELLOWNESS -- and the table then
+        # reported an open plantar ulcer as "erythema, uncertain". The bed test
+        # asks whether the redness has a MARGIN.
+        #
+        # "bed_like" is the only verdict that lifts erythema off UNCERTAIN, and
+        # it still cannot change the grade: `evidence._erythema` caps erythema
+        # at REVIEW whatever this says, and the over-claim guard below requires
+        # localisation to have drawn a confirmed boundary independently. Two
+        # separate mechanisms must agree before the word "wound" appears.
+        role = {"bed_like": POSSIBLE_WOUND}.get(
+            (features.get("erythema_character") or {}).get("verdict"), UNCERTAIN)
     else:
-        # Erythema is never a wound claim on its own -- redness is a colour,
-        # and colour is set as much by the lamp as by the skin.
         role = UNCERTAIN
 
     # A box may never claim MORE than the wound-localisation decision. Where

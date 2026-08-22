@@ -282,17 +282,45 @@ def _dark(f: dict, quality_factor: float) -> Finding:
 def _erythema(f: dict) -> Finding:
     """Redness. Never urgent from a photograph, and this is not a new limit --
     the module has never let erythema exceed REVIEW. It is stated explicitly
-    here so the reason survives a future edit."""
+    here so the reason survives a future edit.
+
+    THE CEILING IS NOT AFFECTED BY `erythema_character`. A granulating wound
+    bed is red, so it arrives in this bucket rather than in `tissue_breakdown`,
+    and the character test now says whether the redness is a bounded area. That
+    is a better DESCRIPTION and nothing more: a bounded red area is still a
+    colour, and none of the measurements behind it establishes warmth, infection
+    or depth. `ceiling` and `sufficient_for_urgent` below are unchanged and
+    asserted by test.
+    """
     pct = float(f.get("erythema_pct", 0.0) or 0.0)
+    character = (f.get("erythema_character") or {}).get("verdict")
+
+    observed = (f"Surface redness over {pct:.1f}% of the imaged region."
+                if pct > 0 else "No surface redness isolated.")
+    if pct > 0 and character == "bed_like":
+        observed += (" It has a defined margin and a moist surface, so it is a "
+                     "BOUNDED AREA rather than scattered colour — which is what "
+                     "an open wound bed looks like in a photograph. What it IS "
+                     "has not been determined.")
+    elif pct > 0 and character == "diffuse_like":
+        observed += (" It has no margin at skin level and a dry surface — "
+                     "colour spread across the skin rather than a bounded area.")
+
+    limits: list[str] = []
+    if character == "diffuse_like":
+        # Stated because the phrasing above could be read as the all-clear.
+        limits.append(
+            "Redness without a margin is NOT reassurance. Spreading erythema "
+            "is itself a red flag, and a photograph taken once cannot tell "
+            "whether it is spreading — only the clinician's answers can."
+        )
+
     return Finding(
         kind="erythema",
-        observed=(
-            f"Surface redness over {pct:.1f}% of the imaged region."
-            if pct > 0 else "No surface redness isolated."
-        ),
+        observed=observed,
         ceiling=Grade.REVIEW,
         sufficient_for_urgent=False,
-        limits=[
+        limits=limits + [
             "Redness in a photograph is a colour, and colour is set as much by "
             "the lamp and the camera's white balance as by the skin. It cannot "
             "establish warmth, infection or inflammation, none of which is "

@@ -183,6 +183,101 @@ def drop_thin_structures(mask: np.ndarray, min_radius: float) -> np.ndarray:
     return keep
 
 
+# --- a bounded bed, or diffuse colour -----------------------------------------
+#
+# The third axis, and the one a field capture asked for directly.
+#
+# This module measures three things: red, yellow, dark. A granulating ulcer bed
+# is RED -- not yellow, not dark -- so by construction it lands in `erythema`
+# and is reported as "surface redness", the same bucket as a flush, a stain of
+# pressure hyperaemia, or the pink of a warm foot. On a real photograph of an
+# open plantar ulcer the wound came back as `erythema 10.7%` inside a bounding
+# box far larger than the wound, and nothing on the page distinguished it from
+# scattered colour variation.
+#
+# What differs is the same thing that separates slough from callus, one axis
+# over: a bed lies IN a defect, so it has a real margin and a moist surface.
+# Diffuse redness fades into the skin around it and is dry.
+#
+# WHAT THIS DOES NOT DO. It does not raise the grade, and it cannot: erythema
+# is capped at REVIEW in `evidence._erythema` because redness in a photograph
+# is a colour, set as much by the lamp and the white balance as by the skin --
+# a bounded red area is still a colour, and none of the tests below establishes
+# warmth, infection or depth. "bed_like" is a statement about a BOUNDARY, not
+# about tissue viability, and the ceiling is unchanged and asserted by test.
+
+RED_BED_MIN_EDGE = 25.0         # a wound margin is a real step, as for slough
+RED_BED_MIN_SPECULAR = 0.012    # a bed is moist; intact red skin is not
+
+
+def red_region_character(bgr: np.ndarray, region: np.ndarray) -> dict:
+    """A bounded, moist bed, or diffuse surface colour?
+
+    Returns the measurements and a verdict of "bed_like", "diffuse_like" or
+    "indeterminate". It never names a diagnosis: granulation tissue, a healing
+    bed and an abraded surface are all "bed_like", and separating THOSE needs
+    a clinician's eyes and hands.
+    """
+    # Fill interior holes first, for the reason `yellow_region_character`
+    # documents: a specular highlight is near-white and therefore not red, so
+    # the a* threshold punches every wet spot OUT of the region before it gets
+    # here -- and moisture is exactly what is being measured. A wetter bed
+    # would otherwise score as drier.
+    region = region.copy()
+    contours, _ = cv2.findContours(region, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if contours:
+        filled = np.zeros_like(region)
+        cv2.drawContours(filled, contours, -1, 255, thickness=cv2.FILLED)
+        region = filled
+
+    sel = region > 0
+    if sel.sum() < 200:
+        return {"verdict": "indeterminate",
+                "reason": "region too small to characterise"}
+
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    band = (cv2.dilate(region, kernel, 2) > 0) & ~(cv2.erode(region, kernel, 2) > 0)
+    gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+    edge = float(np.sqrt(gx * gx + gy * gy)[band].mean()) if band.sum() > 50 else 0.0
+
+    values = gray[sel]
+    ceiling = float(np.percentile(values, 50)) + 45.0
+    specular = float((values >= ceiling).mean())
+
+    defined_edge = edge >= RED_BED_MIN_EDGE
+    wet = specular >= RED_BED_MIN_SPECULAR
+    if defined_edge and wet:
+        verdict = "bed_like"
+    elif not defined_edge and not wet:
+        verdict = "diffuse_like"
+    else:
+        verdict = "indeterminate"
+
+    return {
+        "verdict": verdict,
+        "edge_gradient": round(edge, 2),
+        "specular_fraction": round(specular, 4),
+        "thresholds": {"edge_min_for_bed": RED_BED_MIN_EDGE,
+                       "specular_min_for_bed": RED_BED_MIN_SPECULAR},
+        "meaning": {
+            "bed_like": "A defined margin and a moist surface — the redness "
+                        "is a BOUNDED AREA rather than scattered colour. It "
+                        "says nothing about depth, viability or infection, "
+                        "and it does not raise the grade.",
+            "diffuse_like": "No margin at skin level and a dry surface — "
+                            "colour spread across the skin rather than a "
+                            "bounded area. This is NOT reassurance: "
+                            "spreading erythema is itself a red flag the "
+                            "clinician asks about, and a photograph cannot "
+                            "tell whether it is spreading.",
+            "indeterminate": "The two measurements disagree.",
+        }[verdict],
+    }
+
+
 def drop_backdrop_regions(
     feature: np.ndarray, a: np.ndarray, b: np.ndarray, subject: np.ndarray,
 ) -> tuple[np.ndarray, list[dict]]:
